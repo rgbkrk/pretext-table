@@ -1,7 +1,9 @@
 import { createRoot, type Root } from 'react-dom/client'
 import { createElement } from 'react'
 import { BarChart } from 'semiotic/ordinal'
-import type { ColumnSummary, NumericColumnSummary, CategoricalColumnSummary } from './table'
+import type { NumericColumnSummary, CategoricalColumnSummary } from './table'
+
+type NonNullSummary = NumericColumnSummary | CategoricalColumnSummary
 
 const CHART_HEIGHT = 48
 
@@ -18,11 +20,12 @@ function NumericHistogram({ summary, width }: { summary: NumericColumnSummary; w
       valueAccessor: 'count',
       width,
       height: CHART_HEIGHT,
-      margin: { top: 2, right: 2, bottom: 2, left: 2 },
+      margin: { top: 0, right: 0, bottom: 0, left: 0 },
       color: '#955f3b',
-      barPadding: 2,
+      barPadding: 1,
       enableHover: false,
       showGrid: false,
+      showCategoryTicks: false,
       accessibleTable: false,
     } as Record<string, unknown>),
     createElement('span', { className: 'pt-th-range' },
@@ -59,7 +62,7 @@ function CategoricalBars({ summary }: { summary: CategoricalColumnSummary }) {
   )
 }
 
-function ColumnSummaryChart({ summary, width }: { summary: ColumnSummary; width: number }) {
+function ColumnSummaryChart({ summary, width }: { summary: NonNullSummary; width: number }) {
   if (summary.kind === 'numeric') {
     return createElement(NumericHistogram, { summary, width })
   }
@@ -83,7 +86,7 @@ const roots = new WeakMap<HTMLElement, Root>()
 
 export function renderColumnSummary(
   container: HTMLElement,
-  summary: ColumnSummary,
+  summary: NonNullSummary,
   width: number,
 ) {
   let root = roots.get(container)

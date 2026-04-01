@@ -75,11 +75,15 @@ async function boot() {
     if (col.numeric) {
       const vals = rawCols[c] as number[]
       let min = Infinity, max = -Infinity
+      let monotonic = true
       for (let r = 0; r < rowCount; r++) {
         const v = vals[r] as number
         if (v < min) min = v
         if (v > max) max = v
+        if (r > 0 && v < (vals[r - 1] as number)) monotonic = false
       }
+      // Skip summary for monotonically increasing columns (e.g. IDs)
+      if (monotonic) return null
       const binWidth = (max - min) / BIN_COUNT || 1
       const bins: NumericColumnSummary['bins'] = []
       for (let b = 0; b < BIN_COUNT; b++) {
@@ -129,12 +133,10 @@ async function boot() {
   app.innerHTML = `
     <div class="pt-page">
       <div class="pt-intro">
-        <p class="pt-eyebrow">Pretext × Arrow</p>
+        <p class="pt-eyebrow">Pretext × Arrow × Semiotic</p>
         <h1>Table Viewer</h1>
         <p class="pt-subtitle">
-          ${rowCount.toLocaleString()} rows from Arrow IPC.
-          Row heights computed by <a href="https://github.com/chenglou/pretext">pretext</a> — no DOM measurement.
-          Drag column edges to resize. Click headers to sort.
+          ${rowCount.toLocaleString()} rows. No DOM measurement. Resize columns, click headers to sort.
         </p>
       </div>
       <div id="table-root"></div>

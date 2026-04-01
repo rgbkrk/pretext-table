@@ -156,11 +156,9 @@ h1 {
   display: block;
 }
 
-/* Hide Semiotic axis ticks/labels in header charts — too small for them */
-.pt-th-summary .axis text,
-.pt-th-summary .axis line,
-.pt-th-summary .axis path {
-  display: none;
+/* Hide all Semiotic axes/ticks/labels in header charts — too small for them */
+.pt-th-summary text {
+  display: none !important;
 }
 
 .pt-th-range {
@@ -303,6 +301,26 @@ h1 {
   color: var(--muted);
   border-top: 1px solid var(--rule);
   background: color-mix(in srgb, var(--panel) 90%, var(--page) 10%);
+  display: flex;
+  align-items: center;
+}
+
+.pt-stat-sep {
+  opacity: 0.5;
+}
+
+.pt-stat-value {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+}
+
+.pt-stat-flash {
+  animation: stat-pop 600ms ease-out;
+}
+
+@keyframes stat-pop {
+  0% { color: var(--accent); }
+  100% { color: var(--muted); }
 }
 
 /* --- Scrollbar styling --- */

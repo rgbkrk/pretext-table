@@ -26,7 +26,7 @@ export type CategoricalColumnSummary = {
   othersPct: number
 }
 
-export type ColumnSummary = NumericColumnSummary | CategoricalColumnSummary
+export type ColumnSummary = NumericColumnSummary | CategoricalColumnSummary | null
 
 export type TableData = {
   columns: Column[]
@@ -57,9 +57,23 @@ export function createTable(container: HTMLElement, data: TableData) {
   let sortedIndices: Int32Array = new Int32Array(rowCount)
   for (let i = 0; i < rowCount; i++) sortedIndices[i] = i
 
-  // Pretext cache: prepared handles per (row, col)
-  const preparedCache = new Map<string, PreparedText>()
-  // Row height cache: row index → height (including padding)
+  // Per-cell cache: prepared text + last laid-out width/height
+  // Keyed by data row index (not sorted index) so cache survives re-sorts
+  type CellCache = { prepared: PreparedText; lastWidth: number; lastHeight: number }
+  const cellCaches: CellCache[][] = new Array(rowCount)
+  for (let r = 0; r < rowCount; r++) {
+    const row = new Array<CellCache>(columns.length)
+    for (let c = 0; c < columns.length; c++) {
+      row[c] = {
+        prepared: prepare(data.getCell(r, c), FONT),
+        lastWidth: -1,
+        lastHeight: 0,
+      }
+    }
+    cellCaches[r] = row
+  }
+
+  // Row height cache: sorted row index → height (including padding)
   const rowHeights = new Float64Array(rowCount)
   // Prefix sums for scroll position → row mapping
   const rowPositions = new Float64Array(rowCount + 1)
@@ -69,26 +83,21 @@ export function createTable(container: HTMLElement, data: TableData) {
   // Column widths (mutable copy)
   const colWidths = columns.map(c => c.width)
 
-  // --- Prepare all text & compute heights ---
-
-  function getPrepared(dataRow: number, col: number): PreparedText {
-    const key = `${dataRow}:${col}`
-    let p = preparedCache.get(key)
-    if (!p) {
-      p = prepare(data.getCell(dataRow, col), FONT)
-      preparedCache.set(key, p)
-    }
-    return p
-  }
+  // --- Compute heights (only re-layouts cells whose width changed) ---
 
   function computeRowHeight(sortedRow: number): number {
     const dataRow = sortedIndices[sortedRow]
     let maxH = LINE_HEIGHT // minimum one line
     for (let c = 0; c < columns.length; c++) {
-      const p = getPrepared(dataRow, c)
+      const cell = cellCaches[dataRow][c]
       const cellW = Math.max(1, colWidths[c] - CELL_PAD_H)
-      const { height } = layout(p, cellW, LINE_HEIGHT)
-      if (height > maxH) maxH = height
+      // Only re-layout if width actually changed
+      if (cell.lastWidth !== cellW) {
+        const { height } = layout(cell.prepared, cellW, LINE_HEIGHT)
+        cell.lastHeight = height
+        cell.lastWidth = cellW
+      }
+      if (cell.lastHeight > maxH) maxH = cell.lastHeight
     }
     return maxH + CELL_PAD_V
   }
@@ -210,7 +219,10 @@ export function createTable(container: HTMLElement, data: TableData) {
   container.appendChild(headerEl)
 
   for (let c = 0; c < columns.length; c++) {
-    renderColumnSummary(summaryContainers[c], data.columnSummaries[c], colWidths[c] - CELL_PAD_H)
+    const summary = data.columnSummaries[c]
+    if (summary) {
+      renderColumnSummary(summaryContainers[c], summary, colWidths[c] - CELL_PAD_H)
+    }
   }
 
   // Scroll viewport
@@ -230,7 +242,41 @@ export function createTable(container: HTMLElement, data: TableData) {
   // Stats bar
   const statsEl = document.createElement('div')
   statsEl.className = 'pt-stats'
+
+  function makeStatSpan(className: string): HTMLSpanElement {
+    const el = document.createElement('span')
+    el.className = `pt-stat-value ${className}`
+    return el
+  }
+
+  const statRows = makeStatSpan('pt-stat-rows')
+  const statRange = makeStatSpan('pt-stat-range')
+  const statDom = makeStatSpan('pt-stat-dom')
+  const statFrame = makeStatSpan('pt-stat-frame')
+
+  statRows.textContent = `${rowCount.toLocaleString()} rows`
+  statsEl.append(statRows, sep(), statRange, sep(), statDom, sep(), statFrame)
   container.appendChild(statsEl)
+
+  function sep(): HTMLSpanElement {
+    const s = document.createElement('span')
+    s.className = 'pt-stat-sep'
+    s.textContent = ' · '
+    return s
+  }
+
+  let prevRange = '', prevDom = '', prevFrame = ''
+
+  function updateStat(el: HTMLSpanElement, value: string, prev: string): string {
+    if (value !== prev) {
+      el.textContent = value
+      el.classList.remove('pt-stat-flash')
+      // Force reflow to restart animation
+      void el.offsetWidth
+      el.classList.add('pt-stat-flash')
+    }
+    return value
+  }
 
   // --- Row pool (recycle DOM nodes) ---
 
@@ -346,11 +392,12 @@ export function createTable(container: HTMLElement, data: TableData) {
     lastViewportHeight = viewportH
 
     const elapsed = performance.now() - t0
-    statsEl.textContent =
-      `${rowCount.toLocaleString()} rows · ` +
-      `showing ${first}–${Math.min(last, rowCount - 1)} · ` +
-      `${pool.filter(p => p.assignedRow !== -1).length} DOM rows · ` +
-      `${elapsed.toFixed(1)}ms frame`
+    const rangeStr = `showing ${first}–${Math.min(last, rowCount - 1)}`
+    const domStr = `${pool.filter(p => p.assignedRow !== -1).length} DOM rows`
+    const frameStr = `${elapsed.toFixed(1)}ms frame`
+    prevRange = updateStat(statRange, rangeStr, prevRange)
+    prevDom = updateStat(statDom, domStr, prevDom)
+    prevFrame = updateStat(statFrame, frameStr, prevFrame)
   }
 
   // --- Scroll handler ---
@@ -380,11 +427,14 @@ export function createTable(container: HTMLElement, data: TableData) {
       const ths = headerRowEl.children as HTMLCollectionOf<HTMLDivElement>
       ths[colIndex].style.width = colWidths[colIndex] + 'px'
       // Re-render summary chart at new width
-      renderColumnSummary(
-        summaryContainers[colIndex],
-        data.columnSummaries[colIndex],
-        colWidths[colIndex] - CELL_PAD_H,
-      )
+      const summary = data.columnSummaries[colIndex]
+      if (summary) {
+        renderColumnSummary(
+          summaryContainers[colIndex],
+          summary,
+          colWidths[colIndex] - CELL_PAD_H,
+        )
+      }
       heightsDirty = true
       scheduleRender()
     }
@@ -434,8 +484,14 @@ export function createTable(container: HTMLElement, data: TableData) {
   // --- Boot ---
 
   document.fonts.ready.then(() => {
-    // Re-prepare after fonts load for accurate widths
-    preparedCache.clear()
+    // Re-prepare all cells after fonts load for accurate widths
+    for (let r = 0; r < rowCount; r++) {
+      for (let c = 0; c < columns.length; c++) {
+        const cell = cellCaches[r][c]
+        cell.prepared = prepare(data.getCell(r, c), FONT)
+        cell.lastWidth = -1 // force re-layout
+      }
+    }
     heightsDirty = true
     scheduleRender()
   })
