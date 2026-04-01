@@ -1,21 +1,176 @@
-import { tableFromIPC, Table } from 'apache-arrow'
+import { RecordBatchReader, Type } from 'apache-arrow'
+import type { RecordBatch, Field } from 'apache-arrow'
 import {
   createTable,
   type Column,
+  type ColumnType,
   type TableData,
   type ColumnSummary,
   type NumericColumnSummary,
   type CategoricalColumnSummary,
+  type BooleanColumnSummary,
+  type TimestampColumnSummary,
 } from './table'
 import './style.css'
 
+// --- Column type detection from Arrow schema ---
+
+function detectColumnType(field: Field): ColumnType {
+  const t = field.type.typeId
+  if (t === Type.Bool) return 'boolean'
+  if (t === Type.Timestamp || t === Type.Date || t === Type.DateMillisecond || t === Type.DateDay) return 'timestamp'
+  if (t === Type.Int || t === Type.Float || t === Type.Decimal || t === Type.Int8 || t === Type.Int16 || t === Type.Int32 || t === Type.Int64 || t === Type.Float16 || t === Type.Float32 || t === Type.Float64) return 'numeric'
+  return 'categorical'
+}
+
+// --- Summary accumulators ---
+
+const BIN_COUNT = 25
+const TOP_CATEGORIES = 3
+
+interface SummaryAccumulator {
+  add(rawCol: unknown[], startRow: number, count: number): void
+  snapshot(totalRows: number): ColumnSummary
+}
+
+class NumericAccumulator implements SummaryAccumulator {
+  min = Infinity; max = -Infinity
+  monotonic = true; lastValue = -Infinity
+  private allValues: number[] = []
+
+  add(rawCol: unknown[], startRow: number, count: number) {
+    for (let r = startRow; r < startRow + count; r++) {
+      const v = rawCol[r] as number
+      this.allValues.push(v)
+      if (v < this.min) this.min = v
+      if (v > this.max) this.max = v
+      if (v < this.lastValue) this.monotonic = false
+      this.lastValue = v
+    }
+  }
+
+  snapshot(): ColumnSummary {
+    if (this.monotonic || this.allValues.length === 0) return null
+    const binWidth = (this.max - this.min) / BIN_COUNT || 1
+    const bins: NumericColumnSummary['bins'] = []
+    for (let b = 0; b < BIN_COUNT; b++) {
+      bins.push({ x0: this.min + b * binWidth, x1: this.min + (b + 1) * binWidth, count: 0 })
+    }
+    for (const v of this.allValues) {
+      let idx = Math.floor((v - this.min) / binWidth)
+      if (idx >= BIN_COUNT) idx = BIN_COUNT - 1
+      if (idx < 0) idx = 0
+      bins[idx].count++
+    }
+    return { kind: 'numeric', min: this.min, max: this.max, bins }
+  }
+}
+
+class TimestampAccumulator implements SummaryAccumulator {
+  min = Infinity; max = -Infinity
+  private allValues: number[] = []
+
+  add(rawCol: unknown[], startRow: number, count: number) {
+    for (let r = startRow; r < startRow + count; r++) {
+      const v = Number(rawCol[r])
+      this.allValues.push(v)
+      if (v < this.min) this.min = v
+      if (v > this.max) this.max = v
+    }
+  }
+
+  snapshot(): ColumnSummary {
+    if (this.allValues.length === 0) return null
+    const binWidth = (this.max - this.min) / BIN_COUNT || 1
+    const bins: TimestampColumnSummary['bins'] = []
+    for (let b = 0; b < BIN_COUNT; b++) {
+      bins.push({ x0: this.min + b * binWidth, x1: this.min + (b + 1) * binWidth, count: 0 })
+    }
+    for (const v of this.allValues) {
+      let idx = Math.floor((v - this.min) / binWidth)
+      if (idx >= BIN_COUNT) idx = BIN_COUNT - 1
+      if (idx < 0) idx = 0
+      bins[idx].count++
+    }
+    return { kind: 'timestamp', min: this.min, max: this.max, bins }
+  }
+}
+
+class CategoricalAccumulator implements SummaryAccumulator {
+  private freq = new Map<string, number>()
+  private stringCol: string[]
+
+  constructor(stringCol: string[]) {
+    this.stringCol = stringCol
+  }
+
+  add(_rawCol: unknown[], startRow: number, count: number) {
+    for (let r = startRow; r < startRow + count; r++) {
+      const s = this.stringCol[r]
+      this.freq.set(s, (this.freq.get(s) ?? 0) + 1)
+    }
+  }
+
+  snapshot(totalRows: number): ColumnSummary {
+    const sorted = [...this.freq.entries()].sort((a, b) => b[1] - a[1])
+    const topCategories = sorted.slice(0, TOP_CATEGORIES).map(([label, count]) => ({
+      label, count,
+      pct: Math.round((count / totalRows) * 1000) / 10,
+    }))
+    const othersCount = sorted.slice(TOP_CATEGORIES).reduce((s, e) => s + e[1], 0)
+    const othersPct = Math.round((othersCount / totalRows) * 1000) / 10
+    return {
+      kind: 'categorical',
+      uniqueCount: this.freq.size,
+      topCategories,
+      othersCount,
+      othersPct,
+    } satisfies CategoricalColumnSummary
+  }
+}
+
+class BooleanAccumulator implements SummaryAccumulator {
+  trueCount = 0; falseCount = 0
+
+  add(rawCol: unknown[], startRow: number, count: number) {
+    for (let r = startRow; r < startRow + count; r++) {
+      if (rawCol[r]) this.trueCount++
+      else this.falseCount++
+    }
+  }
+
+  snapshot(totalRows: number): ColumnSummary {
+    return {
+      kind: 'boolean',
+      trueCount: this.trueCount,
+      falseCount: this.falseCount,
+      total: totalRows,
+    } satisfies BooleanColumnSummary
+  }
+}
+
+// --- Column definitions ---
+
+const columnOverrides: Record<string, Partial<Column>> = {
+  id:         { label: 'ID', width: 90, sortable: true },
+  name:       { label: 'Name', width: 180, sortable: true },
+  location:   { label: 'Location', width: 180, sortable: true },
+  department: { label: 'Department', width: 160, sortable: true },
+  note:       { label: 'Note', width: 300, sortable: false },
+  status:     { label: 'Status', width: 120, sortable: true },
+  priority:   { label: 'Priority', width: 100, sortable: true },
+  score:      { label: 'Score', width: 100, sortable: true },
+  email:      { label: 'Email', width: 200, sortable: true },
+  verified:   { label: 'Verified', width: 100, sortable: true },
+  joined:     { label: 'Joined', width: 120, sortable: true },
+}
+
+// --- Boot ---
+
 async function boot() {
   const app = document.getElementById('app')!
-
-  // Show loading state
   app.innerHTML = '<div class="pt-loading">Loading data…</div>'
 
-  // Fetch Arrow IPC file
   const response = await fetch('/data.arrow')
   if (!response.ok) {
     app.innerHTML =
@@ -23,127 +178,116 @@ async function boot() {
     return
   }
 
-  const buffer = await response.arrayBuffer()
-  const table: Table = tableFromIPC(buffer)
-
-  const schema = table.schema
+  const reader = await RecordBatchReader.from(response)
+  const schema = reader.schema
   const fieldNames = schema.fields.map(f => f.name)
 
-  // Define columns with nice labels and widths
-  const columnDefs: Record<string, Partial<Column>> = {
-    id:         { label: 'ID', width: 90, sortable: true, numeric: true },
-    name:       { label: 'Name', width: 180, sortable: true, numeric: false },
-    location:   { label: 'Location', width: 180, sortable: true, numeric: false },
-    department: { label: 'Department', width: 160, sortable: true, numeric: false },
-    note:       { label: 'Note', width: 340, sortable: false, numeric: false },
-    status:     { label: 'Status', width: 140, sortable: true, numeric: false },
-    priority:   { label: 'Priority', width: 120, sortable: true, numeric: false },
-    score:      { label: 'Score', width: 120, sortable: true, numeric: true },
+  // Column type overrides (for columns whose Arrow type doesn't match intent)
+  const typeOverrides: Record<string, ColumnType> = {
+    joined: 'timestamp',
   }
 
-  const columns: Column[] = fieldNames.map(name => ({
-    key: name,
-    label: columnDefs[name]?.label ?? name,
-    width: columnDefs[name]?.width ?? 150,
-    sortable: columnDefs[name]?.sortable ?? true,
-    numeric: columnDefs[name]?.numeric ?? false,
-  }))
-
-  // Precompute string representations for all cells (Arrow → string once)
-  const rowCount = table.numRows
-  const stringCols: string[][] = []
-  const rawCols: unknown[][] = []
-
-  for (let c = 0; c < fieldNames.length; c++) {
-    const col = table.getChild(fieldNames[c])!
-    const strings: string[] = new Array(rowCount)
-    const raws: unknown[] = new Array(rowCount)
-    for (let r = 0; r < rowCount; r++) {
-      const val = col.get(r)
-      raws[r] = val
-      strings[r] = val == null ? '' : String(val)
-    }
-    stringCols.push(strings)
-    rawCols.push(raws)
-  }
-
-  // Compute column summaries for header sparklines
-  const BIN_COUNT = 25
-  const TOP_CATEGORIES = 3
-
-  const columnSummaries: ColumnSummary[] = columns.map((col, c) => {
-    if (col.numeric) {
-      const vals = rawCols[c] as number[]
-      let min = Infinity, max = -Infinity
-      let monotonic = true
-      for (let r = 0; r < rowCount; r++) {
-        const v = vals[r] as number
-        if (v < min) min = v
-        if (v > max) max = v
-        if (r > 0 && v < (vals[r - 1] as number)) monotonic = false
-      }
-      // Skip summary for monotonically increasing columns (e.g. IDs)
-      if (monotonic) return null
-      const binWidth = (max - min) / BIN_COUNT || 1
-      const bins: NumericColumnSummary['bins'] = []
-      for (let b = 0; b < BIN_COUNT; b++) {
-        bins.push({ x0: min + b * binWidth, x1: min + (b + 1) * binWidth, count: 0 })
-      }
-      for (let r = 0; r < rowCount; r++) {
-        const v = vals[r] as number
-        let idx = Math.floor((v - min) / binWidth)
-        if (idx >= BIN_COUNT) idx = BIN_COUNT - 1
-        if (idx < 0) idx = 0
-        bins[idx].count++
-      }
-      return { kind: 'numeric', min, max, bins } satisfies NumericColumnSummary
-    } else {
-      const freq = new Map<string, number>()
-      for (let r = 0; r < rowCount; r++) {
-        const s = stringCols[c][r]
-        freq.set(s, (freq.get(s) ?? 0) + 1)
-      }
-      const sorted = [...freq.entries()].sort((a, b) => b[1] - a[1])
-      const topCategories = sorted.slice(0, TOP_CATEGORIES).map(([label, count]) => ({
-        label,
-        count,
-        pct: Math.round((count / rowCount) * 1000) / 10,
-      }))
-      const othersCount = sorted.slice(TOP_CATEGORIES).reduce((s, e) => s + e[1], 0)
-      const othersPct = Math.round((othersCount / rowCount) * 1000) / 10
-      return {
-        kind: 'categorical',
-        uniqueCount: freq.size,
-        topCategories,
-        othersCount,
-        othersPct,
-      } satisfies CategoricalColumnSummary
+  // Build column definitions from Arrow schema
+  const columns: Column[] = schema.fields.map(field => {
+    const colType = typeOverrides[field.name] ?? detectColumnType(field)
+    const overrides = columnOverrides[field.name]
+    return {
+      key: field.name,
+      label: overrides?.label ?? field.name,
+      width: overrides?.width ?? 150,
+      sortable: overrides?.sortable ?? true,
+      numeric: colType === 'numeric',
+      columnType: colType,
     }
   })
 
+  // Growable column stores
+  const stringCols: string[][] = fieldNames.map(() => [])
+  const rawCols: unknown[][] = fieldNames.map(() => [])
+
+  // Summary accumulators
+  const accumulators: SummaryAccumulator[] = columns.map((col, c) => {
+    switch (col.columnType) {
+      case 'numeric': return new NumericAccumulator()
+      case 'timestamp': return new TimestampAccumulator()
+      case 'boolean': return new BooleanAccumulator()
+      case 'categorical': return new CategoricalAccumulator(stringCols[c])
+    }
+  })
+
+  let totalRows = 0
+
+  // Mutable table data object — grows as batches arrive
   const tableData: TableData = {
     columns,
-    rowCount,
+    rowCount: 0,
     getCell: (row, col) => stringCols[col][row],
     getCellRaw: (row, col) => rawCols[col][row],
-    columnSummaries,
+    columnSummaries: columns.map(() => null),
   }
 
-  // Clear loading and mount table
+  function formatCell(colIndex: number, val: unknown): string {
+    if (val == null) return ''
+    switch (columns[colIndex].columnType) {
+      case 'timestamp': {
+        const d = new Date(Number(val))
+        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+      }
+      case 'boolean':
+        return val ? 'Yes' : 'No'
+      default:
+        return String(val)
+    }
+  }
+
+  function appendBatch(batch: RecordBatch) {
+    const batchRows = batch.numRows
+    const startRow = totalRows
+
+    for (let c = 0; c < fieldNames.length; c++) {
+      const col = batch.getChild(fieldNames[c])!
+      for (let r = 0; r < batchRows; r++) {
+        const val = col.get(r)
+        rawCols[c].push(val)
+        stringCols[c].push(formatCell(c, val))
+      }
+      accumulators[c].add(rawCols[c], startRow, batchRows)
+    }
+
+    totalRows += batchRows
+    tableData.rowCount = totalRows
+    tableData.columnSummaries = accumulators.map(a => a.snapshot(totalRows))
+  }
+
+  // Mount page shell
   app.innerHTML = `
     <div class="pt-page">
       <div class="pt-intro">
         <p class="pt-eyebrow">Pretext × Arrow × Semiotic</p>
         <h1>Table Viewer</h1>
         <p class="pt-subtitle">
-          ${rowCount.toLocaleString()} rows. No DOM measurement. Resize columns, click headers to sort.
+          Streaming from Arrow IPC. No DOM measurement. Resize columns, click headers to sort.
         </p>
       </div>
       <div id="table-root"></div>
     </div>
   `
 
-  createTable(document.getElementById('table-root')!, tableData)
+  // Read first batch to initialize the table
+  const firstResult = await reader.next()
+  if (firstResult.done) {
+    app.innerHTML = '<div class="pt-loading">No data in Arrow file.</div>'
+    return
+  }
+  appendBatch(firstResult.value)
+
+  const engine = createTable(document.getElementById('table-root')!, tableData)
+
+  // Stream remaining batches
+  for await (const batch of reader) {
+    appendBatch(batch)
+    engine.onBatchAppended()
+  }
 }
 
 boot()

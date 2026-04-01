@@ -3,12 +3,15 @@ import { renderColumnSummary } from './sparkline'
 
 // --- Types ---
 
+export type ColumnType = 'numeric' | 'categorical' | 'timestamp' | 'boolean'
+
 export type Column = {
   key: string
   label: string
   width: number
   sortable: boolean
   numeric: boolean
+  columnType: ColumnType
 }
 
 export type NumericColumnSummary = {
@@ -26,7 +29,26 @@ export type CategoricalColumnSummary = {
   othersPct: number
 }
 
-export type ColumnSummary = NumericColumnSummary | CategoricalColumnSummary | null
+export type BooleanColumnSummary = {
+  kind: 'boolean'
+  trueCount: number
+  falseCount: number
+  total: number
+}
+
+export type TimestampColumnSummary = {
+  kind: 'timestamp'
+  min: number
+  max: number
+  bins: { x0: number; x1: number; count: number }[]
+}
+
+export type ColumnSummary =
+  | NumericColumnSummary
+  | CategoricalColumnSummary
+  | BooleanColumnSummary
+  | TimestampColumnSummary
+  | null
 
 export type TableData = {
   columns: Column[]
@@ -34,6 +56,10 @@ export type TableData = {
   getCell: (row: number, col: number) => string
   getCellRaw: (row: number, col: number) => unknown
   columnSummaries: ColumnSummary[]
+}
+
+export type TableEngine = {
+  onBatchAppended(): void
 }
 
 type SortState = { col: number; dir: 'asc' | 'desc' } | null
@@ -49,19 +75,45 @@ const OVERSCAN = 10 // extra rows above/below viewport
 
 // --- Table Engine ---
 
-export function createTable(container: HTMLElement, data: TableData) {
-  const { columns, rowCount } = data
+export function createTable(container: HTMLElement, data: TableData): TableEngine {
+  const { columns } = data
+
+  // Mutable row count — grows as batches arrive
+  let rowCount = data.rowCount
 
   // Sort state
   let sortState: SortState = null
-  let sortedIndices: Int32Array = new Int32Array(rowCount)
+  let sortedIndices: Int32Array
+
+  // Growable typed arrays with capacity doubling
+  let capacity = Math.max(8192, rowCount)
+  let rowHeights = new Float64Array(capacity)
+  let rowPositions = new Float64Array(capacity + 1)
+  sortedIndices = new Int32Array(capacity)
   for (let i = 0; i < rowCount; i++) sortedIndices[i] = i
 
+  let totalHeight = 0
+  let heightsDirty = true
+
+  function growBuffers(needed: number) {
+    if (needed <= capacity) return
+    while (capacity < needed) capacity *= 2
+    const newHeights = new Float64Array(capacity)
+    newHeights.set(rowHeights.subarray(0, rowCount))
+    rowHeights = newHeights
+    const newPositions = new Float64Array(capacity + 1)
+    newPositions.set(rowPositions.subarray(0, rowCount + 1))
+    rowPositions = newPositions
+    const newSorted = new Int32Array(capacity)
+    newSorted.set(sortedIndices.subarray(0, rowCount))
+    sortedIndices = newSorted
+  }
+
   // Per-cell cache: prepared text + last laid-out width/height
-  // Keyed by data row index (not sorted index) so cache survives re-sorts
   type CellCache = { prepared: PreparedText; lastWidth: number; lastHeight: number }
-  const cellCaches: CellCache[][] = new Array(rowCount)
-  for (let r = 0; r < rowCount; r++) {
+  const cellCaches: (CellCache[] | null)[] = []
+
+  function prepareCellRow(r: number): CellCache[] {
     const row = new Array<CellCache>(columns.length)
     for (let c = 0; c < columns.length; c++) {
       row[c] = {
@@ -70,28 +122,28 @@ export function createTable(container: HTMLElement, data: TableData) {
         lastHeight: 0,
       }
     }
-    cellCaches[r] = row
+    return row
   }
 
-  // Row height cache: sorted row index → height (including padding)
-  const rowHeights = new Float64Array(rowCount)
-  // Prefix sums for scroll position → row mapping
-  const rowPositions = new Float64Array(rowCount + 1)
-  let totalHeight = 0
-  let heightsDirty = true
+  // Prepare initial rows
+  for (let r = 0; r < rowCount; r++) {
+    cellCaches[r] = prepareCellRow(r)
+  }
 
   // Column widths (mutable copy)
   const colWidths = columns.map(c => c.width)
 
-  // --- Compute heights (only re-layouts cells whose width changed) ---
+  // --- Compute heights ---
 
   function computeRowHeight(sortedRow: number): number {
     const dataRow = sortedIndices[sortedRow]
-    let maxH = LINE_HEIGHT // minimum one line
+    const cache = cellCaches[dataRow]
+    if (!cache) return LINE_HEIGHT + CELL_PAD_V // estimate for unprepared rows
+
+    let maxH = LINE_HEIGHT
     for (let c = 0; c < columns.length; c++) {
-      const cell = cellCaches[dataRow][c]
+      const cell = cache[c]
       const cellW = Math.max(1, colWidths[c] - CELL_PAD_H)
-      // Only re-layout if width actually changed
       if (cell.lastWidth !== cellW) {
         const { height } = layout(cell.prepared, cellW, LINE_HEIGHT)
         cell.lastHeight = height
@@ -118,7 +170,6 @@ export function createTable(container: HTMLElement, data: TableData) {
     totalHeight = rowPositions[rowCount]
   }
 
-  // Binary search: scroll offset → first visible row
   function rowAtOffset(offset: number): number {
     let lo = 0, hi = rowCount
     while (lo < hi) {
@@ -136,15 +187,19 @@ export function createTable(container: HTMLElement, data: TableData) {
       for (let i = 0; i < rowCount; i++) sortedIndices[i] = i
     } else {
       const { col, dir } = sortState
-      const isNumeric = columns[col].numeric
-      // Build index array and sort
+      const colType = columns[col].columnType
+      const isNumeric = colType === 'numeric' || colType === 'timestamp'
       const indices = new Int32Array(rowCount)
       for (let i = 0; i < rowCount; i++) indices[i] = i
       indices.sort((a, b) => {
         let cmp: number
         if (isNumeric) {
-          const va = data.getCellRaw(a, col) as number
-          const vb = data.getCellRaw(b, col) as number
+          const va = Number(data.getCellRaw(a, col))
+          const vb = Number(data.getCellRaw(b, col))
+          cmp = va - vb
+        } else if (colType === 'boolean') {
+          const va = data.getCellRaw(a, col) ? 1 : 0
+          const vb = data.getCellRaw(b, col) ? 1 : 0
           cmp = va - vb
         } else {
           const sa = data.getCell(a, col)
@@ -177,7 +232,6 @@ export function createTable(container: HTMLElement, data: TableData) {
     th.style.width = colWidths[c] + 'px'
     th.dataset.col = String(c)
 
-    // Top row: label + sort arrow
     const topRow = document.createElement('div')
     topRow.className = 'pt-th-top'
 
@@ -197,13 +251,11 @@ export function createTable(container: HTMLElement, data: TableData) {
 
     th.appendChild(topRow)
 
-    // Summary chart
     const summaryEl = document.createElement('div')
     summaryEl.className = 'pt-th-summary'
     th.appendChild(summaryEl)
     summaryContainers.push(summaryEl)
 
-    // Resize handle
     if (c < columns.length - 1) {
       const handle = document.createElement('div')
       handle.className = 'pt-resize-handle'
@@ -214,16 +266,18 @@ export function createTable(container: HTMLElement, data: TableData) {
     headerRowEl.appendChild(th)
   }
 
-  // Render summary charts after header is in DOM
   headerEl.appendChild(headerRowEl)
   container.appendChild(headerEl)
 
-  for (let c = 0; c < columns.length; c++) {
-    const summary = data.columnSummaries[c]
-    if (summary) {
-      renderColumnSummary(summaryContainers[c], summary, colWidths[c] - CELL_PAD_H)
+  function renderAllSummaries() {
+    for (let c = 0; c < columns.length; c++) {
+      const summary = data.columnSummaries[c]
+      if (summary) {
+        renderColumnSummary(summaryContainers[c], summary, colWidths[c] - CELL_PAD_H)
+      }
     }
   }
+  renderAllSummaries()
 
   // Scroll viewport
   const viewport = document.createElement('div')
@@ -271,7 +325,6 @@ export function createTable(container: HTMLElement, data: TableData) {
     if (value !== prev) {
       el.textContent = value
       el.classList.remove('pt-stat-flash')
-      // Force reflow to restart animation
       void el.offsetWidth
       el.classList.add('pt-stat-flash')
     }
@@ -286,7 +339,7 @@ export function createTable(container: HTMLElement, data: TableData) {
   function updateVisibleOverlays(visFirst: number, visLast: number) {
     for (let c = 0; c < columns.length; c++) {
       const summary = data.columnSummaries[c]
-      if (!summary || summary.kind !== 'numeric') continue
+      if (!summary || (summary.kind !== 'numeric' && summary.kind !== 'timestamp')) continue
 
       const bins = summary.bins
       const visibleBins = new Array<number>(bins.length).fill(0)
@@ -294,7 +347,7 @@ export function createTable(container: HTMLElement, data: TableData) {
 
       for (let r = visFirst; r <= visLast; r++) {
         const dataRow = sortedIndices[r]
-        const v = data.getCellRaw(dataRow, c) as number
+        const v = Number(data.getCellRaw(dataRow, c))
         let idx = Math.floor((v - summary.min) / binWidth)
         if (idx >= bins.length) idx = bins.length - 1
         if (idx < 0) idx = 0
@@ -310,12 +363,12 @@ export function createTable(container: HTMLElement, data: TableData) {
     }
   }
 
-  // --- Row pool (recycle DOM nodes) ---
+  // --- Row pool ---
 
   type PooledRow = {
     el: HTMLDivElement
     cells: HTMLDivElement[]
-    assignedRow: number // sorted row index, -1 if unused
+    assignedRow: number
   }
 
   const pool: PooledRow[] = []
@@ -324,7 +377,6 @@ export function createTable(container: HTMLElement, data: TableData) {
     for (const pr of pool) {
       if (pr.assignedRow === -1) return pr
     }
-    // Create new row
     const el = document.createElement('div')
     el.className = 'pt-row'
     const cells: HTMLDivElement[] = []
@@ -339,6 +391,35 @@ export function createTable(container: HTMLElement, data: TableData) {
     const pr: PooledRow = { el, cells, assignedRow: -1 }
     pool.push(pr)
     return pr
+  }
+
+  // --- Cell rendering (type-aware) ---
+
+  function renderCell(cellEl: HTMLDivElement, dataRow: number, colIndex: number) {
+    const col = columns[colIndex]
+    const raw = data.getCellRaw(dataRow, colIndex)
+    const str = data.getCell(dataRow, colIndex)
+
+    // Clear previous content
+    cellEl.textContent = ''
+    cellEl.className = 'pt-cell'
+
+    switch (col.columnType) {
+      case 'boolean': {
+        const badge = document.createElement('span')
+        badge.className = raw ? 'pt-badge pt-badge-true' : 'pt-badge pt-badge-false'
+        badge.textContent = raw ? 'Yes' : 'No'
+        cellEl.appendChild(badge)
+        break
+      }
+      case 'timestamp': {
+        cellEl.textContent = str
+        cellEl.classList.add('pt-cell-timestamp')
+        break
+      }
+      default:
+        cellEl.textContent = str
+    }
   }
 
   // --- Render loop ---
@@ -363,16 +444,16 @@ export function createTable(container: HTMLElement, data: TableData) {
       scrollContent.style.height = totalHeight + 'px'
     }
 
+    if (rowCount === 0) return
+
     const scrollTop = viewport.scrollTop
     const viewportH = viewport.clientHeight
 
-    // Find visible range
     const first = Math.max(0, rowAtOffset(scrollTop) - OVERSCAN)
     const lastY = scrollTop + viewportH
     let last = rowAtOffset(lastY) + OVERSCAN
     if (last >= rowCount) last = rowCount - 1
 
-    // Recycle rows outside new range
     for (const pr of pool) {
       if (pr.assignedRow !== -1 && (pr.assignedRow < first || pr.assignedRow > last)) {
         pr.el.style.display = 'none'
@@ -380,10 +461,8 @@ export function createTable(container: HTMLElement, data: TableData) {
       }
     }
 
-    // Assign rows in visible range
     for (let r = first; r <= last; r++) {
       const dataRow = sortedIndices[r]
-      // Check if already assigned
       let existing = false
       for (const pr of pool) {
         if (pr.assignedRow === r) { existing = true; break }
@@ -396,20 +475,16 @@ export function createTable(container: HTMLElement, data: TableData) {
       pr.el.style.transform = `translateY(${rowPositions[r]}px)`
       pr.el.style.height = rowHeights[r] + 'px'
 
-      // Stripe
       if (r % 2 === 1) pr.el.classList.add('pt-row-alt')
       else pr.el.classList.remove('pt-row-alt')
 
       for (let c = 0; c < columns.length; c++) {
-        const cell = pr.cells[c]
-        cell.textContent = data.getCell(dataRow, c)
-        cell.style.width = colWidths[c] + 'px'
+        renderCell(pr.cells[c], dataRow, c)
+        pr.cells[c].style.width = colWidths[c] + 'px'
       }
     }
 
-    // Update column widths on existing visible rows if resizing
     if (lastScrollTop === scrollTop && lastViewportHeight === viewportH) {
-      // Might be a resize-only render — update cell widths
       for (const pr of pool) {
         if (pr.assignedRow === -1) continue
         for (let c = 0; c < columns.length; c++) {
@@ -420,7 +495,6 @@ export function createTable(container: HTMLElement, data: TableData) {
       }
     }
 
-    // Update header sparkline overlays when visible range changes
     if (first !== lastVisFirst || last !== lastVisLast) {
       lastVisFirst = first
       lastVisLast = last
@@ -442,7 +516,6 @@ export function createTable(container: HTMLElement, data: TableData) {
   // --- Scroll handler ---
 
   viewport.addEventListener('scroll', () => {
-    // Sync header horizontal scroll with viewport
     headerEl.scrollLeft = viewport.scrollLeft
     scheduleRender()
   }, { passive: true })
@@ -462,10 +535,8 @@ export function createTable(container: HTMLElement, data: TableData) {
     const onMove = (ev: PointerEvent) => {
       const delta = ev.clientX - startX
       colWidths[colIndex] = Math.max(MIN_COL_WIDTH, startWidth + delta)
-      // Update header
       const ths = headerRowEl.children as HTMLCollectionOf<HTMLDivElement>
       ths[colIndex].style.width = colWidths[colIndex] + 'px'
-      // Re-render summary chart at new width
       const summary = data.columnSummaries[colIndex]
       if (summary) {
         renderColumnSummary(
@@ -498,7 +569,6 @@ export function createTable(container: HTMLElement, data: TableData) {
       sortState = { col, dir: 'asc' }
     }
 
-    // Update header arrows
     const ths = headerRowEl.children as HTMLCollectionOf<HTMLDivElement>
     for (let c = 0; c < columns.length; c++) {
       const arrow = ths[c].querySelector('.pt-sort-arrow')
@@ -511,7 +581,6 @@ export function createTable(container: HTMLElement, data: TableData) {
     }
 
     applySort()
-    // Reset scroll and re-render
     viewport.scrollTop = 0
     for (const pr of pool) {
       pr.assignedRow = -1
@@ -520,15 +589,55 @@ export function createTable(container: HTMLElement, data: TableData) {
     scheduleRender()
   }
 
+  // --- Batch append handler ---
+
+  function onBatchAppended() {
+    const prevRowCount = rowCount
+    const newRowCount = data.rowCount
+    growBuffers(newRowCount)
+
+    // Prepare new cells
+    for (let r = prevRowCount; r < newRowCount; r++) {
+      cellCaches[r] = prepareCellRow(r)
+    }
+
+    // Extend sorted indices
+    if (!sortState) {
+      for (let i = prevRowCount; i < newRowCount; i++) {
+        sortedIndices[i] = i
+      }
+    } else {
+      // Re-sort with new data included
+      rowCount = newRowCount
+      applySort()
+    }
+
+    rowCount = newRowCount
+
+    // Update stats and summaries
+    statRows.textContent = `${rowCount.toLocaleString()} rows`
+    renderAllSummaries()
+
+    heightsDirty = true
+    // Force visible rows to refresh
+    for (const pr of pool) {
+      pr.assignedRow = -1
+      pr.el.style.display = 'none'
+    }
+    lastVisFirst = -1
+    lastVisLast = -1
+    scheduleRender()
+  }
+
   // --- Boot ---
 
   document.fonts.ready.then(() => {
-    // Re-prepare all cells after fonts load for accurate widths
     for (let r = 0; r < rowCount; r++) {
+      const cache = cellCaches[r]
+      if (!cache) continue
       for (let c = 0; c < columns.length; c++) {
-        const cell = cellCaches[r][c]
-        cell.prepared = prepare(data.getCell(r, c), FONT)
-        cell.lastWidth = -1 // force re-layout
+        cache[c].prepared = prepare(data.getCell(r, c), FONT)
+        cache[c].lastWidth = -1
       }
     }
     heightsDirty = true
@@ -536,4 +645,6 @@ export function createTable(container: HTMLElement, data: TableData) {
   })
 
   scheduleRender()
+
+  return { onBatchAppended }
 }

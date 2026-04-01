@@ -1,13 +1,16 @@
-// Synthetic data generator — produces an Arrow IPC file with realistic multilingual text.
+// Synthetic data generator — produces an Arrow IPC stream file with multiple
+// record batches for progressive/chunked loading.
 // Run: npx tsx src/generate-data.ts
 
 import {
   tableFromArrays,
   tableToIPC,
+  Table,
 } from 'apache-arrow'
 import { writeFileSync, mkdirSync } from 'node:fs'
 
 const ROW_COUNT = 50_000
+const BATCH_SIZE = 5_000
 
 // --- Name pools ---
 
@@ -84,6 +87,11 @@ const noteTemplates = [
 const statuses = ['Active', 'On Leave', 'Contractor', 'Probation', 'Remote', 'Hybrid']
 const priorities = ['P0', 'P1', 'P2', 'P3', 'P4']
 
+const emailDomains = [
+  'company.io', 'acme.com', 'org.dev', 'example.co', 'corp.net',
+  'team.work', 'devs.io', 'eng.co', 'labs.dev', 'hq.org',
+]
+
 // --- Deterministic PRNG (mulberry32) ---
 
 function mulberry32(seed: number) {
@@ -102,43 +110,78 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(rand() * arr.length)]
 }
 
-// --- Generate rows ---
+// --- Generate batches ---
 
-const ids = new Int32Array(ROW_COUNT)
-const names: string[] = []
-const locationCol: string[] = []
-const departmentCol: string[] = []
-const notes: string[] = []
-const statusCol: string[] = []
-const priorityCol: string[] = []
-const scores = new Float64Array(ROW_COUNT)
+const NOW = Date.now()
+const FIVE_YEARS_MS = 5 * 365.25 * 86_400_000
 
-for (let i = 0; i < ROW_COUNT; i++) {
-  ids[i] = i + 1
-  names.push(`${pick(firstNames)} ${pick(lastNames)}`)
-  locationCol.push(pick(locations))
-  departmentCol.push(pick(departments))
-  notes.push(pick(noteTemplates))
-  statusCol.push(pick(statuses))
-  priorityCol.push(pick(priorities))
-  scores[i] = Math.round(rand() * 10000) / 100
+function sanitizeEmail(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip diacritics
+    .replace(/[^a-zA-Z0-9]/g, '')  // ASCII only
+    .toLowerCase()
 }
 
-// --- Build Arrow table and write IPC ---
+function generateBatch(startId: number, count: number) {
+  const ids = new Int32Array(count)
+  const names: string[] = []
+  const locationCol: string[] = []
+  const departmentCol: string[] = []
+  const notes: string[] = []
+  const statusCol: string[] = []
+  const priorityCol: string[] = []
+  const scores = new Float64Array(count)
+  const emails: string[] = []
+  const verified: boolean[] = []
+  const joined = new Float64Array(count)
 
-const table = tableFromArrays({
-  id: ids,
-  name: names,
-  location: locationCol,
-  department: departmentCol,
-  note: notes,
-  status: statusCol,
-  priority: priorityCol,
-  score: scores,
-})
+  for (let i = 0; i < count; i++) {
+    ids[i] = startId + i + 1
+    const first = pick(firstNames)
+    const last = pick(lastNames)
+    names.push(`${first} ${last}`)
+    locationCol.push(pick(locations))
+    departmentCol.push(pick(departments))
+    notes.push(pick(noteTemplates))
+    statusCol.push(pick(statuses))
+    priorityCol.push(pick(priorities))
+    scores[i] = Math.round(rand() * 10000) / 100
+    emails.push(`${sanitizeEmail(first)}.${sanitizeEmail(last)}@${pick(emailDomains)}`)
+    verified.push(rand() < 0.72)
+    joined[i] = Math.round(NOW - rand() * FIVE_YEARS_MS)
+  }
+
+  return tableFromArrays({
+    id: ids,
+    name: names,
+    location: locationCol,
+    department: departmentCol,
+    note: notes,
+    status: statusCol,
+    priority: priorityCol,
+    score: scores,
+    email: emails,
+    verified,
+    joined,
+  })
+}
+
+// --- Build multi-batch table and write IPC stream ---
+// Generate first batch to establish schema, then concat the rest
+
+const allBatchTables: Table[] = []
+for (let offset = 0; offset < ROW_COUNT; offset += BATCH_SIZE) {
+  const count = Math.min(BATCH_SIZE, ROW_COUNT - offset)
+  allBatchTables.push(generateBatch(offset, count))
+}
+
+// Table.concat preserves batches and reconciles schemas
+const table = allBatchTables.reduce((acc, t) => acc.concat(t))
 
 mkdirSync('public', { recursive: true })
-const ipc = tableToIPC(table)
+const ipc = tableToIPC(table, 'stream')
 writeFileSync('public/data.arrow', ipc)
 
-console.log(`Generated ${ROW_COUNT} rows → public/data.arrow (${(ipc.byteLength / 1024 / 1024).toFixed(1)} MB)`)
+console.log(
+  `Generated ${ROW_COUNT} rows in ${table.batches.length} batches → public/data.arrow ` +
+  `(${(ipc.byteLength / 1024 / 1024).toFixed(1)} MB)`
+)

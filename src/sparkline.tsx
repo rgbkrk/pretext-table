@@ -1,8 +1,17 @@
 import { createRoot, type Root } from 'react-dom/client'
 import { BarChart } from 'semiotic/ordinal'
-import type { NumericColumnSummary, CategoricalColumnSummary } from './table'
+import type {
+  NumericColumnSummary,
+  CategoricalColumnSummary,
+  BooleanColumnSummary,
+  TimestampColumnSummary,
+} from './table'
 
-type NonNullSummary = NumericColumnSummary | CategoricalColumnSummary
+type NonNullSummary =
+  | NumericColumnSummary
+  | CategoricalColumnSummary
+  | BooleanColumnSummary
+  | TimestampColumnSummary
 
 const CHART_HEIGHT = 48
 
@@ -104,15 +113,74 @@ function CategoricalBars({ summary }: { summary: CategoricalColumnSummary }) {
   )
 }
 
+function BooleanRatioBar({ summary }: { summary: BooleanColumnSummary }) {
+  const truePct = summary.total > 0 ? (summary.trueCount / summary.total) * 100 : 0
+  const falsePct = summary.total > 0 ? (summary.falseCount / summary.total) * 100 : 0
+
+  return (
+    <div className="pt-bool-summary">
+      <div className="pt-bool-bar">
+        <div className="pt-bool-true" style={{ width: `${truePct}%` }} />
+        <div className="pt-bool-false" style={{ width: `${falsePct}%` }} />
+      </div>
+      <div className="pt-bool-labels">
+        <span>Yes {truePct.toFixed(0)}%</span>
+        <span>No {falsePct.toFixed(0)}%</span>
+      </div>
+    </div>
+  )
+}
+
+function TimestampHistogram({ summary, width, visibleBins }: {
+  summary: TimestampColumnSummary
+  width: number
+  visibleBins?: number[]
+}) {
+  const minDate = new Date(summary.min).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
+  const maxDate = new Date(summary.max).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
+
+  const data = summary.bins.map((bin, i) => ({ bin: i, count: bin.count }))
+  const hasOverlay = visibleBins && Math.max(...visibleBins) > 0
+
+  return (
+    <div>
+      <div style={{ position: 'relative', width, height: CHART_HEIGHT }}>
+        <BarChart
+          data={data}
+          categoryAccessor="bin"
+          valueAccessor="count"
+          width={width}
+          height={CHART_HEIGHT}
+          margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+          color={hasOverlay ? 'rgba(149, 95, 59, 0.2)' : 'rgba(149, 95, 59, 0.7)'}
+          barPadding={1}
+          enableHover={false}
+          showGrid={false}
+          showCategoryTicks={false}
+          accessibleTable={false}
+        />
+        {hasOverlay && <VisibleOverlay bins={summary.bins} visibleBins={visibleBins} width={width} />}
+      </div>
+      <span className="pt-th-range">{minDate} – {maxDate}</span>
+    </div>
+  )
+}
+
 function ColumnSummaryChart({ summary, width, visibleBins }: {
   summary: NonNullSummary
   width: number
   visibleBins?: number[]
 }) {
-  if (summary.kind === 'numeric') {
-    return <NumericHistogram summary={summary} width={width} visibleBins={visibleBins} />
+  switch (summary.kind) {
+    case 'numeric':
+      return <NumericHistogram summary={summary} width={width} visibleBins={visibleBins} />
+    case 'timestamp':
+      return <TimestampHistogram summary={summary} width={width} visibleBins={visibleBins} />
+    case 'boolean':
+      return <BooleanRatioBar summary={summary} />
+    case 'categorical':
+      return <CategoricalBars summary={summary} />
   }
-  return <CategoricalBars summary={summary} />
 }
 
 // --- Helpers ---

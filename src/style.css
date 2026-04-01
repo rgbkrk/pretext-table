@@ -292,6 +292,62 @@ h1 {
   overflow-wrap: break-word;
 }
 
+/* --- Type-aware cells --- */
+
+.pt-cell-timestamp {
+  font-variant-numeric: tabular-nums;
+}
+
+.pt-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font: 600 11px/1.4 var(--font);
+  letter-spacing: 0.02em;
+}
+
+.pt-badge-true {
+  background: rgba(58, 138, 92, 0.12);
+  color: #2d6e4a;
+}
+
+.pt-badge-false {
+  background: rgba(196, 81, 58, 0.12);
+  color: #9e3a24;
+}
+
+/* --- Boolean summary in header --- */
+
+.pt-bool-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pt-bool-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.pt-bool-true {
+  background: #3a8a5c;
+}
+
+.pt-bool-false {
+  background: #c4513a;
+}
+
+.pt-bool-labels {
+  display: flex;
+  justify-content: space-between;
+  font: 400 10px/1.2 var(--font);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--muted);
+}
+
 /* --- Stats bar --- */
 
 .pt-stats {
