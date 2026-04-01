@@ -532,11 +532,31 @@ export function createTable(container: HTMLElement, data: TableData): TableEngin
       }
     }
 
-    // If we lazy-prepared any rows, rebuild positions and schedule another render
-    // to fix up positions for rows below the newly-measured ones
+    // If we lazy-prepared any rows, positions shifted — recycle everything
+    // and re-render with corrected positions
     if (lazyPrepared) {
       rebuildPositions()
       scrollContent.style.height = totalHeight + 'px'
+      // Reset all assignments so the next pass positions them correctly
+      for (const pr of pool) {
+        pr.assignedRow = -1
+        pr.el.style.display = 'none'
+      }
+      // Re-assign with corrected positions (no more lazy-prep this pass since we just did it)
+      for (let r = first; r <= last; r++) {
+        const dataRow = sortedIndices[r]
+        const pr = getPooledRow()
+        pr.assignedRow = r
+        pr.el.style.display = ''
+        pr.el.style.transform = `translateY(${rowPositions[r]}px)`
+        pr.el.style.height = rowHeights[r] + 'px'
+        if (r % 2 === 1) pr.el.classList.add('pt-row-alt')
+        else pr.el.classList.remove('pt-row-alt')
+        for (let c = 0; c < columns.length; c++) {
+          renderCell(pr.cells[c], dataRow, c)
+          pr.cells[c].style.width = colWidths[c] + 'px'
+        }
+      }
     }
 
     if (lastScrollTop === scrollTop && lastViewportHeight === viewportH) {
