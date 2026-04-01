@@ -179,6 +179,7 @@ async function boot() {
   }
 
   const reader = await RecordBatchReader.from(response)
+  await reader.open()
   const schema = reader.schema
   const fieldNames = schema.fields.map(f => f.name)
 
