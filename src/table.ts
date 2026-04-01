@@ -125,10 +125,8 @@ export function createTable(container: HTMLElement, data: TableData): TableEngin
     return row
   }
 
-  // Prepare initial rows
-  for (let r = 0; r < rowCount; r++) {
-    cellCaches[r] = prepareCellRow(r)
-  }
+  // Cells are prepared lazily when they enter the viewport.
+  // computeRowHeight() handles null caches with an estimated height.
 
   // Column widths (mutable copy)
   const colWidths = columns.map(c => c.width)
@@ -461,8 +459,18 @@ export function createTable(container: HTMLElement, data: TableData): TableEngin
       }
     }
 
+    let lazyPrepared = false
     for (let r = first; r <= last; r++) {
       const dataRow = sortedIndices[r]
+
+      // Lazy-prepare cells on first visibility
+      if (!cellCaches[dataRow]) {
+        cellCaches[dataRow] = prepareCellRow(dataRow)
+        // Recompute this row's height now that we have real measurements
+        rowHeights[r] = computeRowHeight(r)
+        lazyPrepared = true
+      }
+
       let existing = false
       for (const pr of pool) {
         if (pr.assignedRow === r) { existing = true; break }
@@ -482,6 +490,13 @@ export function createTable(container: HTMLElement, data: TableData): TableEngin
         renderCell(pr.cells[c], dataRow, c)
         pr.cells[c].style.width = colWidths[c] + 'px'
       }
+    }
+
+    // If we lazy-prepared any rows, rebuild positions and schedule another render
+    // to fix up positions for rows below the newly-measured ones
+    if (lazyPrepared) {
+      rebuildPositions()
+      scrollContent.style.height = totalHeight + 'px'
     }
 
     if (lastScrollTop === scrollTop && lastViewportHeight === viewportH) {
@@ -519,6 +534,13 @@ export function createTable(container: HTMLElement, data: TableData): TableEngin
     headerEl.scrollLeft = viewport.scrollLeft
     scheduleRender()
   }, { passive: true })
+
+  // Forward wheel events on the header to the viewport so scrolling over the header works
+  headerEl.addEventListener('wheel', (e) => {
+    viewport.scrollTop += e.deltaY
+    viewport.scrollLeft += e.deltaX
+  }, { passive: true })
+
   window.addEventListener('resize', scheduleRender)
 
   // --- Column resize ---
@@ -596,10 +618,7 @@ export function createTable(container: HTMLElement, data: TableData): TableEngin
     const newRowCount = data.rowCount
     growBuffers(newRowCount)
 
-    // Prepare new cells
-    for (let r = prevRowCount; r < newRowCount; r++) {
-      cellCaches[r] = prepareCellRow(r)
-    }
+    // Cells will be lazy-prepared when they enter the viewport
 
     // Extend sorted indices
     if (!sortState) {
