@@ -424,11 +424,58 @@ export function createTable(container: HTMLElement, data: TableData): TableEngin
   }
   document.addEventListener('fullscreenchange', onFullscreenChange)
 
+  const filterPillsEl = document.createElement('div')
+  filterPillsEl.className = 'pt-filter-pills'
+
   const statsSpacer = document.createElement('div')
   statsSpacer.style.flex = '1'
 
-  statsEl.append(statRows, sep(), statRange, sep(), statDom, sep(), statFrame, statsSpacer, fullscreenBtn)
+  statsEl.append(statRows, sep(), statRange, sep(), statDom, sep(), statFrame, filterPillsEl, statsSpacer, fullscreenBtn)
   container.appendChild(statsEl)
+
+  function rebuildFilterPills() {
+    filterPillsEl.innerHTML = ''
+    for (let c = 0; c < columns.length; c++) {
+      const f = filters[c]
+      if (!f) continue
+      const pill = document.createElement('span')
+      pill.className = 'pt-filter-pill'
+
+      let text = columns[c].label + ': '
+      switch (f.kind) {
+        case 'range': {
+          const colType = columns[c].columnType
+          if (colType === 'timestamp') {
+            const fmt = (v: number) => new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })
+            text += `${fmt(f.min)} – ${fmt(f.max)}`
+          } else {
+            text += `${f.min.toLocaleString(undefined, { maximumFractionDigits: 1 })} – ${f.max.toLocaleString(undefined, { maximumFractionDigits: 1 })}`
+          }
+          break
+        }
+        case 'set':
+          text += [...f.values].map(v => v.length > 12 ? v.slice(0, 11) + '…' : v).join(', ')
+          break
+        case 'boolean':
+          text += f.value ? 'Yes' : 'No'
+          break
+      }
+
+      const label = document.createElement('span')
+      label.textContent = text
+
+      const closeBtn = document.createElement('button')
+      closeBtn.className = 'pt-filter-pill-x'
+      closeBtn.textContent = '×'
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        clearFilter(c)
+      })
+
+      pill.append(label, closeBtn)
+      filterPillsEl.appendChild(pill)
+    }
+  }
 
   function sep(): HTMLSpanElement {
     const s = document.createElement('span')
@@ -819,6 +866,7 @@ export function createTable(container: HTMLElement, data: TableData): TableEngin
   function onFilterChanged() {
     applyFilterAndSort()
     updateRowCountDisplay()
+    rebuildFilterPills()
     renderAllSummaries()
     viewport.scrollTop = 0
     for (const pr of pool) {
