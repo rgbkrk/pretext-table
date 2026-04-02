@@ -3,10 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Sift</title>
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      // Auto-reload if critical assets 404 (GitHub Pages CDN cache mismatch)
+      window.addEventListener('error', function(e) {
+        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+          if (!sessionStorage.getItem('reload-attempted')) {
+            sessionStorage.setItem('reload-attempted', '1');
+            location.reload();
+          }
+        }
+      }, true);
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
