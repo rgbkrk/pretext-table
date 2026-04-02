@@ -792,6 +792,7 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
       for (let c = 0; c < columns.length; c++) {
         renderCell(pr.cells[c], dataRow, c)
         pr.cells[c].style.width = colWidths[c] + 'px'
+        applyCellPinStyle(pr.cells[c], c)
       }
     }
 
@@ -818,6 +819,7 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
         for (let c = 0; c < columns.length; c++) {
           renderCell(pr.cells[c], dataRow, c)
           pr.cells[c].style.width = colWidths[c] + 'px'
+          applyCellPinStyle(pr.cells[c], c)
         }
       }
     }
@@ -1313,7 +1315,38 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     }
   }
 
+  // Precompute cumulative left offsets for pinned columns
+  let pinnedLeftOffsets: number[] = []
+  function recomputePinnedOffsets() {
+    pinnedLeftOffsets = new Array(columns.length).fill(-1)
+    let cumLeft = 0
+    for (let c = 0; c < columns.length; c++) {
+      if (pinnedColumns.has(c)) {
+        pinnedLeftOffsets[c] = cumLeft
+        cumLeft += colWidths[c]
+      }
+    }
+  }
+  recomputePinnedOffsets()
+
+  function applyCellPinStyle(cell: HTMLElement, colIndex: number) {
+    if (pinnedColumns.has(colIndex)) {
+      cell.style.position = 'sticky'
+      cell.style.left = pinnedLeftOffsets[colIndex] + 'px'
+      cell.style.zIndex = '1'
+      cell.style.background = 'var(--panel)'
+      cell.style.boxShadow = '2px 0 4px rgba(0,0,0,0.04)'
+    } else {
+      cell.style.position = ''
+      cell.style.left = ''
+      cell.style.zIndex = ''
+      cell.style.background = ''
+      cell.style.boxShadow = ''
+    }
+  }
+
   function updatePinnedStyles() {
+    recomputePinnedOffsets()
     const ths = headerRowEl.children as HTMLCollectionOf<HTMLDivElement>
     let cumulativeLeft = 0
     for (let c = 0; c < columns.length; c++) {
