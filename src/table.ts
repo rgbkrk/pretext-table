@@ -1383,41 +1383,23 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
 
   function updatePinnedStyles() {
     recomputePinnedOffsets()
-    const ths = headerRowEl.children as HTMLCollectionOf<HTMLDivElement>
-    let cumulativeLeft = 0
-    for (let c = 0; c < columns.length; c++) {
-      const th = ths[c]
-      const cells = document.querySelectorAll(`.pt-row .pt-cell:nth-child(${c + 1})`)
-      if (pinnedColumns.has(c)) {
-        // Header is now inside scroll content — sticky works correctly
+    // Iterate in visual order since DOM has been reordered
+    const ths = Array.from(headerRowEl.children) as HTMLDivElement[]
+    for (let vi = 0; vi < visualOrder.length; vi++) {
+      const dataCol = visualOrder[vi]
+      const th = ths[vi] // visual position
+      if (pinnedColumns.has(dataCol)) {
         th.style.position = 'sticky'
-        th.style.left = cumulativeLeft + 'px'
+        th.style.left = pinnedLeftOffsets[dataCol] + 'px'
         th.style.zIndex = '6'
         th.style.background = 'color-mix(in srgb, var(--panel) 90%, var(--page) 10%)'
         th.style.boxShadow = '2px 0 4px rgba(0,0,0,0.04)'
-        cells.forEach(cell => {
-          const el = cell as HTMLElement
-          el.style.position = 'sticky'
-          el.style.left = cumulativeLeft + 'px'
-          el.style.zIndex = '1'
-          el.style.background = 'var(--panel)'
-          el.style.boxShadow = '2px 0 4px rgba(0,0,0,0.04)'
-        })
-        cumulativeLeft += colWidths[c]
       } else {
         th.style.position = ''
         th.style.left = ''
         th.style.zIndex = ''
         th.style.background = ''
         th.style.boxShadow = ''
-        cells.forEach(cell => {
-          const el = cell as HTMLElement
-          el.style.position = ''
-          el.style.left = ''
-          el.style.zIndex = ''
-          el.style.background = ''
-          el.style.boxShadow = ''
-        })
       }
     }
   }
