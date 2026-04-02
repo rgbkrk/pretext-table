@@ -138,8 +138,16 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
   // Sort state
   let sortState: SortState = null
 
-  // Pinned columns
+  // Pinned columns + visual ordering
   const pinnedColumns = new Set<number>([0]) // first column pinned by default
+  // Visual column order: pinned columns first, then the rest
+  let visualOrder: number[] = computeVisualOrder()
+
+  function computeVisualOrder(): number[] {
+    const pinned = [...pinnedColumns].sort((a, b) => a - b)
+    const unpinned = columns.map((_, i) => i).filter(i => !pinnedColumns.has(i))
+    return [...pinned, ...unpinned]
+  }
 
   // viewIndices: sorted position → data row (filtered + sorted)
   let viewIndices: Int32Array
@@ -657,12 +665,16 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     const el = document.createElement('div')
     el.className = 'pt-row'
     const cells: HTMLDivElement[] = []
+    // Create cells in data order (cells[c] = column c)
     for (let c = 0; c < columns.length; c++) {
       const cell = document.createElement('div')
       cell.className = 'pt-cell'
       cell.style.width = colWidths[c] + 'px'
-      el.appendChild(cell)
       cells.push(cell)
+    }
+    // Append in visual order
+    for (const c of visualOrder) {
+      el.appendChild(cells[c])
     }
     rowPool.appendChild(el)
     const pr: PooledRow = { el, cells, assignedRow: -1 }
@@ -1281,11 +1293,15 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
 
       case 'pin':
         pinnedColumns.add(colIndex)
+        visualOrder = computeVisualOrder()
+        reorderColumns()
         updatePinnedStyles()
         break
 
       case 'unpin':
         pinnedColumns.delete(colIndex)
+        visualOrder = computeVisualOrder()
+        reorderColumns()
         updatePinnedStyles()
         break
 
@@ -1345,43 +1361,54 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     }
   }
 
+  function reorderColumns() {
+    // Reorder header TH elements to match visualOrder
+    const ths = Array.from(headerRowEl.children) as HTMLDivElement[]
+    for (const colIdx of visualOrder) {
+      headerRowEl.appendChild(ths[colIdx])
+    }
+
+    // Reorder cells in each pooled row
+    for (const pr of pool) {
+      for (const colIdx of visualOrder) {
+        pr.el.appendChild(pr.cells[colIdx])
+      }
+    }
+
+    // Force re-render to update positions
+    heightsDirty = true
+    for (const pr of pool) { pr.assignedRow = -1; pr.el.style.display = 'none' }
+    scheduleRender()
+  }
+
   function updatePinnedStyles() {
     recomputePinnedOffsets()
-    const ths = headerRowEl.children as HTMLCollectionOf<HTMLDivElement>
-    let cumulativeLeft = 0
-    for (let c = 0; c < columns.length; c++) {
-      const th = ths[c]
-      const cells = document.querySelectorAll(`.pt-row .pt-cell:nth-child(${c + 1})`)
-      if (pinnedColumns.has(c)) {
-        // Header is now inside scroll content — sticky works correctly
+    // Find the last pinned visual index
+    let lastPinnedVi = -1
+    for (let vi = 0; vi < visualOrder.length; vi++) {
+      if (pinnedColumns.has(visualOrder[vi])) lastPinnedVi = vi
+    }
+    // Iterate in visual order since DOM has been reordered
+    const ths = Array.from(headerRowEl.children) as HTMLDivElement[]
+    for (let vi = 0; vi < visualOrder.length; vi++) {
+      const dataCol = visualOrder[vi]
+      const th = ths[vi]
+      const handle = th.querySelector('.pt-resize-handle') as HTMLElement | null
+      if (pinnedColumns.has(dataCol)) {
         th.style.position = 'sticky'
-        th.style.left = cumulativeLeft + 'px'
+        th.style.left = pinnedLeftOffsets[dataCol] + 'px'
         th.style.zIndex = '6'
         th.style.background = 'color-mix(in srgb, var(--panel) 90%, var(--page) 10%)'
-        th.style.boxShadow = '2px 0 4px rgba(0,0,0,0.04)'
-        cells.forEach(cell => {
-          const el = cell as HTMLElement
-          el.style.position = 'sticky'
-          el.style.left = cumulativeLeft + 'px'
-          el.style.zIndex = '1'
-          el.style.background = 'var(--panel)'
-          el.style.boxShadow = '2px 0 4px rgba(0,0,0,0.04)'
-        })
-        cumulativeLeft += colWidths[c]
+        th.style.boxShadow = vi === lastPinnedVi ? '2px 0 4px rgba(0,0,0,0.04)' : ''
+        // Hide resize bar on last pinned column (shadow provides the edge)
+        if (handle) handle.style.opacity = vi === lastPinnedVi ? '0' : ''
       } else {
         th.style.position = ''
         th.style.left = ''
         th.style.zIndex = ''
         th.style.background = ''
         th.style.boxShadow = ''
-        cells.forEach(cell => {
-          const el = cell as HTMLElement
-          el.style.position = ''
-          el.style.left = ''
-          el.style.zIndex = ''
-          el.style.background = ''
-          el.style.boxShadow = ''
-        })
+        if (handle) handle.style.opacity = ''
       }
     }
   }
