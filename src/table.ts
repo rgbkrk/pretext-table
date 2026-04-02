@@ -21,12 +21,16 @@ export type NumericColumnSummary = {
   bins: { x0: number; x1: number; count: number }[]
 }
 
+export type CategoryEntry = { label: string; count: number; pct: number }
+
 export type CategoricalColumnSummary = {
   kind: 'categorical'
   uniqueCount: number
-  topCategories: { label: string; count: number; pct: number }[]
+  topCategories: CategoryEntry[]
   othersCount: number
   othersPct: number
+  /** All categories sorted by frequency (descending). Used by the filter popover. */
+  allCategories: CategoryEntry[]
 }
 
 export type BooleanColumnSummary = {
