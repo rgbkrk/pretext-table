@@ -851,13 +851,6 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
 
   function onScroll() {
     headerEl.scrollLeft = viewport.scrollLeft
-    // Keep pinned header cells fixed by counter-transforming the scroll
-    const ths = headerRowEl.children as HTMLCollectionOf<HTMLDivElement>
-    for (const colIdx of pinnedColumns) {
-      if (colIdx < ths.length) {
-        ths[colIdx].style.transform = `translateX(${viewport.scrollLeft}px)`
-      }
-    }
     scheduleRender()
   }
 
@@ -1327,11 +1320,8 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
       const th = ths[c]
       const cells = document.querySelectorAll(`.pt-row .pt-cell:nth-child(${c + 1})`)
       if (pinnedColumns.has(c)) {
-        th.style.position = 'sticky'
-        th.style.left = cumulativeLeft + 'px'
+        // Header: no sticky (scrolls via JS sync). Just z-index for paint order.
         th.style.zIndex = '3'
-        th.style.background = 'color-mix(in srgb, var(--panel) 90%, var(--page) 10%)'
-        th.style.boxShadow = '2px 0 4px rgba(0,0,0,0.04)'
         cells.forEach(cell => {
           const el = cell as HTMLElement
           el.style.position = 'sticky'
@@ -1342,11 +1332,7 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
         })
         cumulativeLeft += colWidths[c]
       } else {
-        th.style.position = ''
-        th.style.left = ''
         th.style.zIndex = ''
-        th.style.background = ''
-        th.style.boxShadow = ''
         cells.forEach(cell => {
           const el = cell as HTMLElement
           el.style.position = ''
