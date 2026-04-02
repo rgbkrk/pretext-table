@@ -65,12 +65,32 @@ export type SetFilter = { kind: 'set'; values: Set<string> }
 export type BooleanFilter = { kind: 'boolean'; value: boolean }
 export type ColumnFilter = RangeFilter | SetFilter | BooleanFilter | null
 
+export type TableEngineState = {
+  sort: { column: string; direction: 'asc' | 'desc' } | null
+  filters: { column: string; filter: ColumnFilter }[]
+  filteredCount: number
+  totalCount: number
+}
+
+export type TableEngineOptions = {
+  /** Called whenever sort or filter state changes from UI interaction. */
+  onChange?: (state: TableEngineState) => void
+}
+
 export type TableEngine = {
   onBatchAppended(): void
   destroy(): void
   setFilter(colIndex: number, filter: ColumnFilter): void
   clearFilter(colIndex: number): void
   clearAllFilters(): void
+  /** Get current sort state. */
+  getSort(): { column: string; direction: 'asc' | 'desc' } | null
+  /** Programmatically sort by column name and direction. Pass null to clear. */
+  setSort(column: string, direction: 'asc' | 'desc'): void
+  /** Get current filter state for all columns. */
+  getFilters(): { column: string; filter: ColumnFilter }[]
+  /** Get the full explorer state (sort + filters + counts) in a serializable format. */
+  getState(): TableEngineState
 }
 
 type SortState = { col: number; dir: 'asc' | 'desc' } | null
@@ -86,7 +106,7 @@ const OVERSCAN = 10 // extra rows above/below viewport
 
 // --- Table Engine ---
 
-export function createTable(container: HTMLElement, data: TableData): TableEngine {
+export function createTable(container: HTMLElement, data: TableData, options?: TableEngineOptions): TableEngine {
   const { columns } = data
 
   // Mutable row count — grows as batches arrive
@@ -790,6 +810,7 @@ export function createTable(container: HTMLElement, data: TableData): TableEngin
       pr.el.style.display = 'none'
     }
     scheduleRender()
+    notifyChange()
   }
 
   // --- Batch append handler ---
@@ -876,6 +897,7 @@ export function createTable(container: HTMLElement, data: TableData): TableEngin
     lastVisFirst = -1
     lastVisLast = -1
     scheduleRender()
+    notifyChange()
   }
 
   function setFilter(colIndex: number, filter: ColumnFilter) {
@@ -893,5 +915,64 @@ export function createTable(container: HTMLElement, data: TableData): TableEngin
     onFilterChanged()
   }
 
-  return { onBatchAppended, destroy, setFilter, clearFilter, clearAllFilters }
+  // --- State getters ---
+
+  function getSort(): TableEngineState['sort'] {
+    if (!sortState) return null
+    return { column: columns[sortState.col].key, direction: sortState.dir }
+  }
+
+  function setSortByName(column: string, direction: 'asc' | 'desc') {
+    const colIndex = columns.findIndex(c => c.key === column)
+    if (colIndex === -1) return
+    sortState = { col: colIndex, dir: direction }
+
+    const ths = headerRowEl.children as HTMLCollectionOf<HTMLDivElement>
+    for (let c = 0; c < columns.length; c++) {
+      const arrow = ths[c].querySelector('.pt-sort-arrow')
+      if (!arrow) continue
+      if (sortState && sortState.col === c) {
+        arrow.textContent = sortState.dir === 'asc' ? ' ↑' : ' ↓'
+      } else {
+        arrow.textContent = ''
+      }
+    }
+
+    applyFilterAndSort()
+    viewport.scrollTop = 0
+    for (const pr of pool) {
+      pr.assignedRow = -1
+      pr.el.style.display = 'none'
+    }
+    scheduleRender()
+  }
+
+  function getFilters(): TableEngineState['filters'] {
+    const result: TableEngineState['filters'] = []
+    for (let i = 0; i < columns.length; i++) {
+      if (filters[i]) {
+        result.push({ column: columns[i].key, filter: filters[i] })
+      }
+    }
+    return result
+  }
+
+  function getState(): TableEngineState {
+    return {
+      sort: getSort(),
+      filters: getFilters(),
+      filteredCount,
+      totalCount: rowCount,
+    }
+  }
+
+  function notifyChange() {
+    options?.onChange?.(getState())
+  }
+
+  return {
+    onBatchAppended, destroy,
+    setFilter, clearFilter, clearAllFilters,
+    getSort, setSort: setSortByName, getFilters, getState,
+  }
 }
