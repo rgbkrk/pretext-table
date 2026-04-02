@@ -210,6 +210,16 @@ h1 {
   gap: 2px;
 }
 
+.pt-filter-dot {
+  display: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  margin-left: 3px;
+}
+
 .pt-th-label {
   overflow: hidden;
   text-overflow: ellipsis;

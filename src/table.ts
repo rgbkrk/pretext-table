@@ -365,6 +365,11 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
       topRow.addEventListener('click', () => onSortClick(c))
     }
 
+    const filterDot = document.createElement('span')
+    filterDot.className = 'pt-filter-dot'
+    filterDot.title = 'Showing filtered data'
+    topRow.appendChild(filterDot)
+
     th.appendChild(topRow)
 
     const summaryEl = document.createElement('div')
@@ -1048,10 +1053,24 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     }
   }
 
+  function updateFilterDots() {
+    const active = hasActiveFilters()
+    const ths = headerRowEl.children as HTMLCollectionOf<HTMLDivElement>
+    for (let c = 0; c < columns.length; c++) {
+      const dot = ths[c].querySelector('.pt-filter-dot') as HTMLElement
+      const label = ths[c].querySelector('.pt-th-label') as HTMLElement
+      if (dot) dot.style.display = active ? '' : 'none'
+      if (label) label.style.color = active ? 'var(--accent)' : ''
+    }
+  }
+  // Initially hidden
+  updateFilterDots()
+
   function onFilterChanged() {
     applyFilterAndSort()
     recomputeFilteredSummaries()
     updateRowCountDisplay()
+    updateFilterDots()
     rebuildFilterPills()
     renderAllSummaries()
     viewport.scrollTop = 0
