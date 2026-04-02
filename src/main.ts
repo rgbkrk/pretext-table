@@ -9,8 +9,6 @@ import {
 } from './table'
 import {
   detectColumnType,
-  refineColumnType,
-  isNullSentinel,
   formatCell,
   NumericAccumulator,
   TimestampAccumulator,
@@ -19,8 +17,8 @@ import {
   type SummaryAccumulator,
 } from './accumulators'
 import { DATASETS, type DatasetEntry } from './datasets'
-import { loadHuggingFaceParquet, resolveHuggingFaceParquetUrl } from './parquet-loader'
-import { isAvailable as isWasmAvailable, loadParquet as wasmLoadParquet, getModuleSync } from './predicate'
+import { resolveHuggingFaceParquetUrl } from './parquet-loader'
+import { loadParquet as wasmLoadParquet, getModuleSync } from './predicate'
 import { createWasmTableData } from './wasm-table-data'
 import './style.css'
 
@@ -157,13 +155,7 @@ async function loadDataset(datasetId: string) {
     if (dataset.source === 'local') {
       await loadLocalArrow(dataset, tableRoot)
     } else {
-      // Try WASM-native path first (skips parquet-wasm + JS materialization)
-      const wasmOk = await isWasmAvailable().catch(() => false)
-      if (wasmOk) {
-        await loadHuggingFaceWasm(dataset, tableRoot)
-      } else {
-        await loadHuggingFace(dataset, tableRoot)
-      }
+      await loadHuggingFaceWasm(dataset, tableRoot)
     }
   } catch (err) {
     console.error('Failed to load dataset:', err)
@@ -316,127 +308,10 @@ function renderLoadingSkeleton(tableRoot: HTMLElement, status: string) {
   `
 }
 
-async function loadHuggingFace(dataset: DatasetEntry, tableRoot: HTMLElement) {
-  renderLoadingSkeleton(tableRoot, 'Resolving dataset…')
+// Old JS/parquet-wasm HuggingFace loader removed — WASM path handles everything now.
+// See loadHuggingFaceWasm() above.
 
-  const { ipcBytes } = await loadHuggingFaceParquet(
-    dataset.path,
-    dataset.config,
-    undefined,
-    (status) => renderLoadingSkeleton(tableRoot, status),
-  )
-
-  renderLoadingSkeleton(tableRoot, 'Parsing Arrow data…')
-
-  const reader = await RecordBatchReader.from(ipcBytes)
-  await reader.open()
-
-  const { columns, fieldNames, stringCols, rawCols, accumulators, tableData } =
-    buildTableState(reader.schema, dataset)
-
-  let totalRows = 0
-  // Track columns where string values were refined to timestamps (need parsing)
-  const refinedToTimestamp = new Set<number>()
-  // Track columns with null sentinel replacement
-  const hasNullSentinels = new Set<number>()
-
-  function appendBatch(batch: RecordBatch) {
-    const batchRows = batch.numRows
-    const startRow = totalRows
-    for (let c = 0; c < fieldNames.length; c++) {
-      const col = batch.getChild(fieldNames[c])!
-      for (let r = 0; r < batchRows; r++) {
-        let val: unknown = col.get(r)
-
-        // Replace null sentinels with actual null
-        if (hasNullSentinels.has(c) && val != null && isNullSentinel(String(val))) {
-          val = null
-        }
-
-        // Parse string dates to epoch ms for refined timestamp columns
-        if (refinedToTimestamp.has(c) && val != null) {
-          const parsed = new Date(String(val)).getTime()
-          val = Number.isFinite(parsed) ? parsed : null
-        }
-
-        rawCols[c].push(val)
-        stringCols[c].push(formatCell(columns[c].columnType, val))
-      }
-      accumulators[c].add(rawCols[c], startRow, batchRows)
-    }
-    totalRows += batchRows
-    tableData.rowCount = totalRows
-    tableData.columnSummaries = accumulators.map(a => a.snapshot(totalRows))
-  }
-
-  const firstResult = await reader.next()
-  if (firstResult.done) {
-    tableRoot.innerHTML = '<div class="pt-loading">No data in dataset.</div>'
-    return
-  }
-  appendBatch(firstResult.value)
-
-  // Refine column types by sampling actual data from the first batch.
-  // This catches string columns that are really timestamps (e.g. "2019-06-23")
-  // and converts null sentinels (e.g. "?", "N/A") to actual nulls.
-  for (let c = 0; c < columns.length; c++) {
-    const refinement = refineColumnType(columns[c].columnType, rawCols[c])
-
-    if (refinement.hasNullSentinels) {
-      hasNullSentinels.add(c)
-      // Replace sentinel values with null in raw and re-format strings
-      for (let r = 0; r < rawCols[c].length; r++) {
-        if (rawCols[c][r] != null && isNullSentinel(String(rawCols[c][r]))) {
-          rawCols[c][r] = null
-          stringCols[c][r] = ''
-        }
-      }
-    }
-
-    if (refinement.type !== columns[c].columnType) {
-      const refined = refinement.type
-      if (refined === 'timestamp') refinedToTimestamp.add(c)
-      columns[c].columnType = refined
-      columns[c].numeric = refined === 'numeric'
-      columns[c].width = autoWidth(columns[c].key, refined)
-
-      // For string→timestamp refinement, parse date strings to epoch ms
-      if (refined === 'timestamp') {
-        for (let r = 0; r < rawCols[c].length; r++) {
-          const val = rawCols[c][r]
-          if (val != null) {
-            const parsed = new Date(String(val)).getTime()
-            rawCols[c][r] = Number.isFinite(parsed) ? parsed : null
-          }
-        }
-      }
-
-      // Re-format all cells with the new type
-      for (let r = 0; r < rawCols[c].length; r++) {
-        stringCols[c][r] = formatCell(refined, rawCols[c][r])
-      }
-
-      // Rebuild the accumulator for this column
-      switch (refined) {
-        case 'numeric': accumulators[c] = new NumericAccumulator(); break
-        case 'timestamp': accumulators[c] = new TimestampAccumulator(); break
-        case 'boolean': accumulators[c] = new BooleanAccumulator(); break
-        case 'categorical': accumulators[c] = new CategoricalAccumulator(stringCols[c]); break
-      }
-      accumulators[c].add(rawCols[c], 0, totalRows)
-      tableData.columnSummaries[c] = accumulators[c].snapshot(totalRows)
-    }
-  }
-
-  tableRoot.innerHTML = ''
-  currentEngine = createTable(tableRoot, tableData)
-
-  for await (const batch of reader) {
-    appendBatch(batch)
-    currentEngine.onBatchAppended()
-  }
-}
-
+// Kept for reference: type refinement logic (string→timestamp, null sentinels)
 /** Build table columns, stores, and accumulators from an Arrow schema. */
 function buildTableState(
   schema: import('apache-arrow').Schema,
