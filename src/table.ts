@@ -1383,23 +1383,32 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
 
   function updatePinnedStyles() {
     recomputePinnedOffsets()
+    // Find the last pinned visual index
+    let lastPinnedVi = -1
+    for (let vi = 0; vi < visualOrder.length; vi++) {
+      if (pinnedColumns.has(visualOrder[vi])) lastPinnedVi = vi
+    }
     // Iterate in visual order since DOM has been reordered
     const ths = Array.from(headerRowEl.children) as HTMLDivElement[]
     for (let vi = 0; vi < visualOrder.length; vi++) {
       const dataCol = visualOrder[vi]
-      const th = ths[vi] // visual position
+      const th = ths[vi]
+      const handle = th.querySelector('.pt-resize-handle') as HTMLElement | null
       if (pinnedColumns.has(dataCol)) {
         th.style.position = 'sticky'
         th.style.left = pinnedLeftOffsets[dataCol] + 'px'
         th.style.zIndex = '6'
         th.style.background = 'color-mix(in srgb, var(--panel) 90%, var(--page) 10%)'
-        th.style.boxShadow = '2px 0 4px rgba(0,0,0,0.04)'
+        th.style.boxShadow = vi === lastPinnedVi ? '2px 0 4px rgba(0,0,0,0.04)' : ''
+        // Hide resize bar on last pinned column (shadow provides the edge)
+        if (handle) handle.style.opacity = vi === lastPinnedVi ? '0' : ''
       } else {
         th.style.position = ''
         th.style.left = ''
         th.style.zIndex = ''
         th.style.background = ''
         th.style.boxShadow = ''
+        if (handle) handle.style.opacity = ''
       }
     }
   }
