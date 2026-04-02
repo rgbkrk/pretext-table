@@ -187,17 +187,39 @@ async function loadLocalArrow(dataset: DatasetEntry, tableRoot: HTMLElement) {
   }
 }
 
+function renderLoadingSkeleton(tableRoot: HTMLElement, status: string) {
+  const existing = tableRoot.querySelector('.pt-skeleton')
+  if (existing) {
+    const statusEl = existing.querySelector('.pt-skeleton-status')
+    if (statusEl) statusEl.textContent = status
+    return
+  }
+  tableRoot.innerHTML = `
+    <div class="pt-skeleton">
+      <div class="pt-skeleton-header">
+        ${Array.from({ length: 6 }, () => '<div class="pt-skeleton-th"><div class="pt-skeleton-bar pt-skeleton-label"></div><div class="pt-skeleton-bar pt-skeleton-chart"></div></div>').join('')}
+      </div>
+      <div class="pt-skeleton-body">
+        ${Array.from({ length: 12 }, () => `<div class="pt-skeleton-row">${Array.from({ length: 6 }, () => '<div class="pt-skeleton-cell"><div class="pt-skeleton-bar pt-skeleton-text"></div></div>').join('')}</div>`).join('')}
+      </div>
+      <div class="pt-skeleton-footer">
+        <span class="pt-skeleton-status">${status}</span>
+      </div>
+    </div>
+  `
+}
+
 async function loadHuggingFace(dataset: DatasetEntry, tableRoot: HTMLElement) {
+  renderLoadingSkeleton(tableRoot, 'Resolving dataset…')
+
   const { ipcBytes } = await loadHuggingFaceParquet(
     dataset.path,
     dataset.config,
     undefined,
-    (status) => {
-      tableRoot.innerHTML = `<div class="pt-loading">${status}</div>`
-    },
+    (status) => renderLoadingSkeleton(tableRoot, status),
   )
 
-  tableRoot.innerHTML = '<div class="pt-loading">Parsing Arrow data…</div>'
+  renderLoadingSkeleton(tableRoot, 'Parsing Arrow data…')
 
   const reader = await RecordBatchReader.from(ipcBytes)
   await reader.open()
