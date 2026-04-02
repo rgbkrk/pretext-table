@@ -210,14 +210,15 @@ h1 {
   gap: 2px;
 }
 
-.pt-filter-dot {
-  display: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
-  margin-left: 3px;
+.pt-filter-line {
+  font: 400 10px/1.2 var(--font);
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: normal;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pt-th-label {

@@ -365,11 +365,6 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
       topRow.addEventListener('click', () => onSortClick(c))
     }
 
-    const filterDot = document.createElement('span')
-    filterDot.className = 'pt-filter-dot'
-    filterDot.title = 'Showing filtered data'
-    topRow.appendChild(filterDot)
-
     th.appendChild(topRow)
 
     const summaryEl = document.createElement('div')
@@ -1053,24 +1048,102 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     }
   }
 
-  function updateFilterDots() {
+  function filterLabel(f: ColumnFilter): string {
+    if (!f) return ''
+    switch (f.kind) {
+      case 'range': return `Filtering to ${f.min.toFixed(0)}–${f.max.toFixed(0)}`
+      case 'set': {
+        const vals = [...f.values]
+        if (vals.length === 1) return vals[0]
+        return `Filtering by ${vals.length} values`
+      }
+      case 'boolean': return `Filtering to ${f.value ? 'Yes' : 'No'}`
+    }
+  }
+
+  function hiddenLabel(c: number): string | null {
+    const full = unfilteredSummaries[c]
+    const filtered = data.columnSummaries[c]
+    if (!full || !filtered) return null
+
+    if (full.kind === 'categorical' && filtered.kind === 'categorical') {
+      const hidden = full.uniqueCount - filtered.uniqueCount
+      if (hidden > 0) return `${hidden} values hidden`
+      return null
+    }
+    if (full.kind === 'boolean' && filtered.kind === 'boolean') {
+      const anyHidden =
+        (full.trueCount > 0 && filtered.trueCount === 0) ||
+        (full.falseCount > 0 && filtered.falseCount === 0) ||
+        (full.nullCount > 0 && filtered.nullCount === 0)
+      return anyHidden ? 'Some values hidden' : null
+    }
+    // Numeric/timestamp — handled via asterisk on label
+    return null
+  }
+
+  function updateFilteredLabels() {
     const active = hasActiveFilters()
     const ths = headerRowEl.children as HTMLCollectionOf<HTMLDivElement>
     for (let c = 0; c < columns.length; c++) {
-      const dot = ths[c].querySelector('.pt-filter-dot') as HTMLElement
-      const label = ths[c].querySelector('.pt-th-label') as HTMLElement
-      if (dot) dot.style.display = active ? '' : 'none'
-      if (label) label.style.color = active ? 'var(--accent)' : ''
+      const th = ths[c]
+      const label = th.querySelector('.pt-th-label') as HTMLElement
+
+      // Remove existing filter line
+      const existing = th.querySelector('.pt-filter-line')
+      if (existing) existing.remove()
+
+      const f = filters[c]
+      const colType = columns[c].columnType
+      const isNumericType = colType === 'numeric' || colType === 'timestamp'
+
+      // Reset label
+      if (label) {
+        label.style.color = f ? 'var(--accent)' : ''
+        // Asterisk on numeric/timestamp columns when others are filtered
+        if (!f && active && isNumericType) {
+          label.textContent = columns[c].label + ' *'
+        } else {
+          label.textContent = columns[c].label
+        }
+      }
+
+      if (active) {
+        const parts: string[] = []
+        if (f) parts.push(filterLabel(f))
+        const hidden = hiddenLabel(c)
+        if (hidden) parts.push(hidden)
+
+        if (parts.length > 0) {
+          const line = document.createElement('div')
+          line.className = 'pt-filter-line'
+          line.textContent = parts.join(' · ')
+          th.appendChild(line)
+        }
+
+        // Detailed hover tooltip showing which filters affect this column
+        if (!f) {
+          const activeFilters: string[] = []
+          for (let i = 0; i < columns.length; i++) {
+            if (filters[i]) {
+              activeFilters.push(`${columns[i].label}: ${filterLabel(filters[i])}`)
+            }
+          }
+          th.title = `Values filtered by ${activeFilters.join(', ')}`
+        } else {
+          th.title = ''
+        }
+      } else {
+        th.title = ''
+      }
     }
   }
-  // Initially hidden
-  updateFilterDots()
 
   function onFilterChanged() {
     applyFilterAndSort()
     recomputeFilteredSummaries()
     updateRowCountDisplay()
-    updateFilterDots()
+    updateFilteredLabels()
     rebuildFilterPills()
     renderAllSummaries()
     viewport.scrollTop = 0
