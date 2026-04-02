@@ -73,10 +73,23 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run generate
-      - run: npx playwright test e2e/perf.spec.ts
+      - name: Run perf benchmarks
+        run: npx playwright test e2e/perf.spec.ts 2>&1 | tee perf-output.txt
+      - name: Extract perf JSON
+        run: |
+          node -e "
+            const fs = require('fs');
+            const log = fs.readFileSync('perf-output.txt', 'utf8');
+            const match = log.match(/Results JSON:\s*\n([\s\S]*?\n\])/);
+            if (match) {
+              const results = JSON.parse(match[1]);
+              const out = { timestamp: new Date().toISOString(), commit: '${{ github.sha }}', results };
+              fs.writeFileSync('perf-results.json', JSON.stringify(out, null, 2));
+            }
+          "
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
-          name: playwright-perf-report
-          path: test-results/
-          retention-days: 7
+          name: perf-results
+          path: perf-results.json
+          retention-days: 90
