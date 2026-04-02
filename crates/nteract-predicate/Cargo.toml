@@ -27,7 +27,7 @@ arrow-select = { version = "54", default-features = false }
 arrow-string = { version = "54", default-features = false }
 
 # Parquet reader — replaces parquet-wasm as a separate dependency
-parquet = { version = "54", default-features = false, features = ["arrow"] }
+parquet = { version = "54", default-features = false, features = ["arrow", "snap", "flate2", "zstd"] }
 
 [profile.release]
 opt-level = "s"      # optimize for size

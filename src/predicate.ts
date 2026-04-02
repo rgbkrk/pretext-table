@@ -162,3 +162,14 @@ export async function isNull(handle: number, row: number, col: number): Promise<
   const m = await ensureModule()
   return m.is_null(handle, row, col)
 }
+
+// --- Synchronous access (only valid after ensureModule() has resolved) ---
+
+/**
+ * Get the module reference synchronously. Throws if not yet initialized.
+ * Call ensureModule() first during your async setup phase.
+ */
+export function getModuleSync(): PredicateModule {
+  if (!mod) throw new Error('nteract-predicate WASM not initialized. Call ensureModule() first.')
+  return mod
+}

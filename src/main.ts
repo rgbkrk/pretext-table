@@ -19,7 +19,9 @@ import {
   type SummaryAccumulator,
 } from './accumulators'
 import { DATASETS, type DatasetEntry } from './datasets'
-import { loadHuggingFaceParquet } from './parquet-loader'
+import { loadHuggingFaceParquet, resolveHuggingFaceParquetUrl } from './parquet-loader'
+import { isAvailable as isWasmAvailable, loadParquet as wasmLoadParquet, getModuleSync } from './predicate'
+import { createWasmTableData } from './wasm-table-data'
 import './style.css'
 
 // --- Column definitions for the generated dataset ---
@@ -155,7 +157,13 @@ async function loadDataset(datasetId: string) {
     if (dataset.source === 'local') {
       await loadLocalArrow(dataset, tableRoot)
     } else {
-      await loadHuggingFace(dataset, tableRoot)
+      // Try WASM-native path first (skips parquet-wasm + JS materialization)
+      const wasmOk = await isWasmAvailable().catch(() => false)
+      if (wasmOk) {
+        await loadHuggingFaceWasm(dataset, tableRoot)
+      } else {
+        await loadHuggingFace(dataset, tableRoot)
+      }
     }
   } catch (err) {
     console.error('Failed to load dataset:', err)
@@ -212,6 +220,58 @@ async function loadLocalArrow(dataset: DatasetEntry, tableRoot: HTMLElement) {
     appendBatch(batch)
     currentEngine.onBatchAppended()
   }
+}
+
+async function loadHuggingFaceWasm(dataset: DatasetEntry, tableRoot: HTMLElement) {
+  renderLoadingSkeleton(tableRoot, 'Resolving dataset…')
+
+  const url = await resolveHuggingFaceParquetUrl(dataset.path, dataset.config)
+
+  renderLoadingSkeleton(tableRoot, 'Downloading Parquet…')
+  const resp = await fetch(url)
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch Parquet: ${resp.status} ${resp.statusText}`)
+  }
+  const parquetBytes = new Uint8Array(await resp.arrayBuffer())
+
+  renderLoadingSkeleton(tableRoot, 'Loading into WASM…')
+  const handle = await wasmLoadParquet(parquetBytes)
+
+  const { tableData, columns } = createWasmTableData(handle)
+
+  // Build accumulators for summaries (still JS for now — task #7 will move to WASM)
+  const mod = getModuleSync()
+  const numRows = mod.num_rows(handle)
+  const accumulators: SummaryAccumulator[] = columns.map((col, c) => {
+    switch (col.columnType) {
+      case 'numeric': return new NumericAccumulator()
+      case 'timestamp': return new TimestampAccumulator()
+      case 'boolean': return new BooleanAccumulator()
+      case 'categorical': {
+        // Build a string array from WASM for the categorical accumulator
+        const strings: string[] = []
+        for (let r = 0; r < numRows; r++) {
+          strings.push(mod.is_null(handle, r, c) ? '' : mod.get_cell_string(handle, r, c))
+        }
+        return new CategoricalAccumulator(strings)
+      }
+    }
+  })
+
+  // Feed raw values to accumulators
+  for (let c = 0; c < columns.length; c++) {
+    const raw: unknown[] = []
+    for (let r = 0; r < numRows; r++) {
+      raw.push(tableData.getCellRaw(r, c))
+    }
+    accumulators[c].add(raw, 0, numRows)
+  }
+
+  tableData.rowCount = numRows
+  tableData.columnSummaries = accumulators.map(a => a.snapshot(numRows))
+
+  tableRoot.innerHTML = ''
+  currentEngine = createTable(tableRoot, tableData)
 }
 
 function renderLoadingSkeleton(tableRoot: HTMLElement, status: string) {
