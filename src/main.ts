@@ -217,10 +217,14 @@ async function loadLocalArrow(dataset: DatasetEntry, tableRoot: HTMLElement) {
 async function loadHuggingFaceWasm(dataset: DatasetEntry, tableRoot: HTMLElement) {
   renderLoadingSkeleton(tableRoot, 'Resolving dataset…')
 
+  // Start WASM init in parallel with URL resolution + Parquet download
+  const { isAvailable } = await import('./predicate')
+  const wasmInitPromise = isAvailable()
+
   const url = await resolveHuggingFaceParquetUrl(dataset.path, dataset.config)
 
   renderLoadingSkeleton(tableRoot, 'Downloading Parquet…')
-  const resp = await fetch(url)
+  const [resp] = await Promise.all([fetch(url), wasmInitPromise])
   if (!resp.ok) {
     throw new Error(`Failed to fetch Parquet: ${resp.status} ${resp.statusText}`)
   }

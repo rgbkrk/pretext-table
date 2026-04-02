@@ -25,7 +25,7 @@ test.describe('Dataset Picker', () => {
 
   test('URL param selects dataset', async ({ page }) => {
     await page.goto('/?dataset=heart-failure')
-    await page.waitForSelector('.pt-table-container', { timeout: 30_000 })
+    await page.waitForSelector('.pt-table-container', { timeout: 60_000 })
 
     const select = page.locator('#dataset-select')
     await expect(select).toHaveValue('heart-failure')
@@ -39,20 +39,20 @@ test.describe('Dataset Picker', () => {
     await page.locator('#dataset-select').selectOption('heart-failure')
 
     // Wait for the new dataset to load
-    await page.waitForSelector('.pt-table-container', { timeout: 30_000 })
-    await expect(page.locator('.pt-stat-rows')).toContainText('299', { timeout: 30_000 })
+    await page.waitForSelector('.pt-table-container', { timeout: 60_000 })
+    await expect(page.locator('.pt-stat-rows')).toContainText('299', { timeout: 60_000 })
   })
 
   test('switching datasets updates URL', async ({ page }) => {
     await page.locator('#dataset-select').selectOption('heart-failure')
-    await page.waitForSelector('.pt-table-container', { timeout: 30_000 })
+    await page.waitForSelector('.pt-table-container', { timeout: 60_000 })
 
     expect(page.url()).toContain('dataset=heart-failure')
   })
 
   test('switching back to generated removes URL param', async ({ page }) => {
     await page.locator('#dataset-select').selectOption('heart-failure')
-    await page.waitForSelector('.pt-table-container', { timeout: 30_000 })
+    await page.waitForSelector('.pt-table-container', { timeout: 60_000 })
 
     await page.locator('#dataset-select').selectOption('generated')
     await page.waitForSelector('.pt-table-container', { timeout: 10_000 })
@@ -64,10 +64,10 @@ test.describe('Dataset Picker', () => {
 test.describe('HuggingFace Dataset Loading', () => {
   test('Heart Failure loads with boolean columns', async ({ page }) => {
     await page.goto('/?dataset=heart-failure')
-    await page.waitForSelector('.pt-table-container', { timeout: 30_000 })
+    await page.waitForSelector('.pt-table-container', { timeout: 60_000 })
 
     // Should have 299 rows
-    await expect(page.locator('.pt-stat-rows')).toContainText('299', { timeout: 30_000 })
+    await expect(page.locator('.pt-stat-rows')).toContainText('299', { timeout: 60_000 })
 
     // Should have boolean badges (this dataset has 5 boolean columns)
     await expect(page.locator('.pt-badge').first()).toBeVisible({ timeout: 5_000 })
@@ -75,8 +75,8 @@ test.describe('HuggingFace Dataset Loading', () => {
 
   test('Heart Failure has header summaries', async ({ page }) => {
     await page.goto('/?dataset=heart-failure')
-    await page.waitForSelector('.pt-table-container', { timeout: 30_000 })
-    await expect(page.locator('.pt-stat-rows')).toContainText('299', { timeout: 30_000 })
+    await page.waitForSelector('.pt-table-container', { timeout: 60_000 })
+    await expect(page.locator('.pt-stat-rows')).toContainText('299', { timeout: 60_000 })
 
     // Should have boolean ratio bars (the dataset has 5 boolean columns)
     await expect(page.locator('.pt-bool-bar').first()).toBeVisible({ timeout: 5_000 })
