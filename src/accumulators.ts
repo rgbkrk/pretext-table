@@ -199,10 +199,11 @@ export class CategoricalAccumulator implements SummaryAccumulator {
 
   snapshot(totalRows: number): ColumnSummary {
     const sorted = [...this.freq.entries()].sort((a, b) => b[1] - a[1])
-    const topCategories = sorted.slice(0, TOP_CATEGORIES).map(([label, count]) => ({
+    const allCategories = sorted.map(([label, count]) => ({
       label, count,
       pct: Math.round((count / totalRows) * 1000) / 10,
     }))
+    const topCategories = allCategories.slice(0, TOP_CATEGORIES)
     const othersCount = sorted.slice(TOP_CATEGORIES).reduce((s, e) => s + e[1], 0)
     const othersPct = Math.round((othersCount / totalRows) * 1000) / 10
     return {
@@ -211,6 +212,7 @@ export class CategoricalAccumulator implements SummaryAccumulator {
       topCategories,
       othersCount,
       othersPct,
+      allCategories,
     } satisfies CategoricalColumnSummary
   }
 }
