@@ -1,5 +1,11 @@
 import { prepare, layout, type PreparedText } from '@chenglou/pretext'
 import { renderColumnSummary, unmountColumnSummary } from './sparkline'
+import {
+  NumericAccumulator,
+  TimestampAccumulator,
+  CategoricalAccumulator,
+  BooleanAccumulator,
+} from './accumulators'
 
 // --- Types ---
 
@@ -120,6 +126,9 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
   // Filter state — one per column, null = no filter
   const filters: ColumnFilter[] = columns.map(() => null)
   let filteredCount = rowCount
+
+  // Unfiltered summaries (saved so we can restore when filters are cleared)
+  let unfilteredSummaries: ColumnSummary[] = [...data.columnSummaries]
 
   // Sort state
   let sortState: SortState = null
@@ -891,6 +900,14 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     // Re-filter and re-sort with new data
     applyFilterAndSort()
 
+    // Save the latest unfiltered summaries
+    unfilteredSummaries = [...data.columnSummaries]
+
+    // If filters are active, recompute from filtered rows
+    if (hasActiveFilters()) {
+      recomputeFilteredSummaries()
+    }
+
     // Update stats and summaries
     updateRowCountDisplay()
     renderAllSummaries()
@@ -996,8 +1013,43 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
 
   // --- Filter API ---
 
+  function recomputeFilteredSummaries() {
+    if (!hasActiveFilters()) {
+      // Restore unfiltered summaries
+      data.columnSummaries = [...unfilteredSummaries]
+      return
+    }
+
+    // Build fresh accumulators from the filtered row set
+    for (let c = 0; c < columns.length; c++) {
+      const colType = columns[c].columnType
+      // Temporary string column for categorical accumulator
+      const filteredStrings: string[] = []
+      const filteredRaw: unknown[] = []
+
+      for (let i = 0; i < filteredCount; i++) {
+        const dataRow = viewIndices[i]
+        filteredRaw.push(data.getCellRaw(dataRow, c))
+        if (colType === 'categorical') {
+          filteredStrings.push(data.getCell(dataRow, c))
+        }
+      }
+
+      let acc
+      switch (colType) {
+        case 'numeric': acc = new NumericAccumulator(); break
+        case 'timestamp': acc = new TimestampAccumulator(); break
+        case 'boolean': acc = new BooleanAccumulator(); break
+        case 'categorical': acc = new CategoricalAccumulator(filteredStrings); break
+      }
+      acc.add(filteredRaw, 0, filteredCount)
+      data.columnSummaries[c] = acc.snapshot(filteredCount)
+    }
+  }
+
   function onFilterChanged() {
     applyFilterAndSort()
+    recomputeFilteredSummaries()
     updateRowCountDisplay()
     rebuildFilterPills()
     renderAllSummaries()
