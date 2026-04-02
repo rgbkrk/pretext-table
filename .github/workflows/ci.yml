@@ -32,7 +32,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run generate
       # Run core E2E tests (no network dependency)
-      - run: npx playwright test e2e/table.spec.ts
+      - run: npx playwright test e2e/table.spec.ts e2e/datasets.spec.ts
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -46,6 +46,8 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -53,8 +55,8 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run generate
-      # HuggingFace dataset tests (requires network access)
-      - run: npx playwright test e2e/datasets.spec.ts --timeout 60000
+      # HuggingFace dataset tests (requires network + WASM init)
+      - run: npx playwright test e2e/huggingface.spec.ts --timeout 120000
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
