@@ -19,7 +19,9 @@ import {
   type SummaryAccumulator,
 } from './accumulators'
 import { DATASETS, type DatasetEntry } from './datasets'
-import { loadHuggingFaceParquet } from './parquet-loader'
+import { loadHuggingFaceParquet, resolveHuggingFaceParquetUrl } from './parquet-loader'
+import { isAvailable as isWasmAvailable, loadParquet as wasmLoadParquet, getModuleSync } from './predicate'
+import { createWasmTableData } from './wasm-table-data'
 import './style.css'
 
 // --- Column definitions for the generated dataset ---
@@ -155,7 +157,13 @@ async function loadDataset(datasetId: string) {
     if (dataset.source === 'local') {
       await loadLocalArrow(dataset, tableRoot)
     } else {
-      await loadHuggingFace(dataset, tableRoot)
+      // Try WASM-native path first (skips parquet-wasm + JS materialization)
+      const wasmOk = await isWasmAvailable().catch(() => false)
+      if (wasmOk) {
+        await loadHuggingFaceWasm(dataset, tableRoot)
+      } else {
+        await loadHuggingFace(dataset, tableRoot)
+      }
     }
   } catch (err) {
     console.error('Failed to load dataset:', err)
@@ -212,6 +220,78 @@ async function loadLocalArrow(dataset: DatasetEntry, tableRoot: HTMLElement) {
     appendBatch(batch)
     currentEngine.onBatchAppended()
   }
+}
+
+async function loadHuggingFaceWasm(dataset: DatasetEntry, tableRoot: HTMLElement) {
+  renderLoadingSkeleton(tableRoot, 'Resolving dataset…')
+
+  const url = await resolveHuggingFaceParquetUrl(dataset.path, dataset.config)
+
+  renderLoadingSkeleton(tableRoot, 'Downloading Parquet…')
+  const resp = await fetch(url)
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch Parquet: ${resp.status} ${resp.statusText}`)
+  }
+  const parquetBytes = new Uint8Array(await resp.arrayBuffer())
+
+  renderLoadingSkeleton(tableRoot, 'Loading into WASM…')
+  const handle = await wasmLoadParquet(parquetBytes)
+
+  const { tableData, columns } = createWasmTableData(handle)
+
+  // Build summaries directly in WASM — no JS accumulator loop
+  const mod = getModuleSync()
+  const numRows = mod.num_rows(handle)
+  const BIN_COUNT = 25
+
+  tableData.rowCount = numRows
+  tableData.columnSummaries = columns.map((col, c) => {
+    switch (col.columnType) {
+      case 'categorical': {
+        const counts = mod.store_value_counts(handle, c) as { label: string; count: number }[]
+        const totalRows = numRows
+        const allCategories = counts.map(({ label, count }) => ({
+          label, count,
+          pct: Math.round((count / totalRows) * 1000) / 10,
+        }))
+        const topCategories = allCategories.slice(0, 3)
+        const othersCount = counts.slice(3).reduce((s, e) => s + e.count, 0)
+        const othersPct = Math.round((othersCount / totalRows) * 1000) / 10
+        return {
+          kind: 'categorical' as const,
+          uniqueCount: counts.length,
+          topCategories,
+          othersCount,
+          othersPct,
+          allCategories,
+        }
+      }
+      case 'boolean': {
+        const [trueCount, falseCount, nullCount] = mod.store_bool_counts(handle, c)
+        return {
+          kind: 'boolean' as const,
+          trueCount,
+          falseCount,
+          nullCount,
+          total: numRows,
+        }
+      }
+      case 'numeric':
+      case 'timestamp': {
+        const bins = mod.store_histogram(handle, c, BIN_COUNT) as { x0: number; x1: number; count: number }[]
+        if (bins.length === 0) return null
+        return {
+          kind: col.columnType as 'numeric' | 'timestamp',
+          min: bins[0].x0,
+          max: bins[bins.length - 1].x1,
+          bins,
+        }
+      }
+    }
+  })
+
+  tableRoot.innerHTML = ''
+  currentEngine = createTable(tableRoot, tableData)
 }
 
 function renderLoadingSkeleton(tableRoot: HTMLElement, status: string) {

@@ -74,6 +74,22 @@ export function num_cols(handle: number): number;
 export function num_rows(handle: number): number;
 
 /**
+ * Count boolean values in a column: returns [true_count, false_count, null_count].
+ */
+export function store_bool_counts(handle: number, col: number): Uint32Array;
+
+/**
+ * Compute histogram for a numeric column in a loaded store.
+ */
+export function store_histogram(handle: number, col: number, num_bins: number): any;
+
+/**
+ * Compute value_counts for a column in a loaded store. Much faster than
+ * the JS accumulator path since it iterates batches in Rust.
+ */
+export function store_value_counts(handle: number, col: number): any;
+
+/**
  * Search a string column for values containing a substring.
  * Returns indices of matching rows as a Uint32Array.
  *
@@ -105,11 +121,22 @@ export interface InitOutput {
     readonly load_parquet: (a: number, b: number, c: number) => void;
     readonly num_cols: (a: number, b: number) => void;
     readonly num_rows: (a: number, b: number) => void;
+    readonly store_bool_counts: (a: number, b: number, c: number) => void;
+    readonly store_histogram: (a: number, b: number, c: number, d: number) => void;
+    readonly store_value_counts: (a: number, b: number, c: number) => void;
     readonly filter_rows: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly histogram: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly init: () => void;
     readonly string_contains: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly value_counts: (a: number, b: number, c: number, d: number) => void;
+    readonly rust_zstd_wasm_shim_calloc: (a: number, b: number) => number;
+    readonly rust_zstd_wasm_shim_free: (a: number) => void;
+    readonly rust_zstd_wasm_shim_malloc: (a: number) => number;
+    readonly rust_zstd_wasm_shim_memcmp: (a: number, b: number, c: number) => number;
+    readonly rust_zstd_wasm_shim_memcpy: (a: number, b: number, c: number) => number;
+    readonly rust_zstd_wasm_shim_memmove: (a: number, b: number, c: number) => number;
+    readonly rust_zstd_wasm_shim_memset: (a: number, b: number, c: number) => number;
+    readonly rust_zstd_wasm_shim_qsort: (a: number, b: number, c: number, d: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_add_to_stack_pointer: (a: number) => number;

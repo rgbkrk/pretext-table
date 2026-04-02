@@ -17,6 +17,10 @@ type PredicateModule = {
   get_cell_string(handle: number, row: number, col: number): string
   get_cell_f64(handle: number, row: number, col: number): number
   is_null(handle: number, row: number, col: number): boolean
+  // Store-based summaries (operates on handle, iterates in Rust)
+  store_value_counts(handle: number, col: number): { label: string; count: number }[]
+  store_histogram(handle: number, col: number, num_bins: number): { x0: number; x1: number; count: number }[]
+  store_bool_counts(handle: number, col: number): Uint32Array
   // Compute (stateless, takes IPC bytes)
   value_counts(ipc_bytes: Uint8Array, column_index: number): { label: string; count: number }[]
   histogram(ipc_bytes: Uint8Array, column_index: number, num_bins: number): { x0: number; x1: number; count: number }[]
@@ -161,4 +165,15 @@ export async function getCellF64(handle: number, row: number, col: number): Prom
 export async function isNull(handle: number, row: number, col: number): Promise<boolean> {
   const m = await ensureModule()
   return m.is_null(handle, row, col)
+}
+
+// --- Synchronous access (only valid after ensureModule() has resolved) ---
+
+/**
+ * Get the module reference synchronously. Throws if not yet initialized.
+ * Call ensureModule() first during your async setup phase.
+ */
+export function getModuleSync(): PredicateModule {
+  if (!mod) throw new Error('nteract-predicate WASM not initialized. Call ensureModule() first.')
+  return mod
 }

@@ -18,6 +18,14 @@ async function ensureWasm(): Promise<ReadParquetFn> {
 /**
  * Resolve the Parquet file URL(s) for a HuggingFace dataset.
  */
+export async function resolveHuggingFaceParquetUrl(
+  dataset: string,
+  config?: string,
+  split?: string,
+): Promise<string> {
+  return resolveParquetUrl(dataset, config, split)
+}
+
 async function resolveParquetUrl(
   dataset: string,
   config = 'default',
