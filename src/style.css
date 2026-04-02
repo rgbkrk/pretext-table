@@ -217,6 +217,7 @@ h1 {
   flex-shrink: 0;
   text-transform: none;
   letter-spacing: normal;
+  margin-left: 3px;
 }
 
 .pt-filter-line {
@@ -246,6 +247,7 @@ h1 {
 .pt-th-summary {
   width: 100%;
   overflow: hidden;
+  animation: summary-fade-in 300ms ease-out;
   --semiotic-bg: transparent;
   --semiotic-text: var(--muted);
   --semiotic-text-secondary: var(--muted);
@@ -257,6 +259,11 @@ h1 {
 .pt-th-summary svg,
 .pt-th-summary canvas {
   display: block;
+}
+
+@keyframes summary-fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Hide Semiotic axis labels in header charts */
