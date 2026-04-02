@@ -84,6 +84,7 @@ function renderShell(app: HTMLElement) {
               `).join('')}
             </select>
           </div>
+          <button class="pt-theme-toggle" id="theme-toggle" title="Toggle dark mode">◑</button>
         </div>
         <p class="pt-subtitle" id="dataset-description">${dataset.description}</p>
       </div>
@@ -107,6 +108,30 @@ function renderShell(app: HTMLElement) {
       loadDataset(newId)
     }
   })
+
+  // Theme toggle
+  document.getElementById('theme-toggle')!.addEventListener('click', () => {
+    const root = document.documentElement
+    const current = root.getAttribute('data-theme')
+    if (current === 'dark') {
+      root.setAttribute('data-theme', 'light')
+      localStorage.setItem('theme', 'light')
+    } else if (current === 'light') {
+      root.removeAttribute('data-theme')
+      localStorage.setItem('theme', 'system')
+    } else {
+      root.setAttribute('data-theme', 'dark')
+      localStorage.setItem('theme', 'dark')
+    }
+  })
+
+  // Restore saved theme preference
+  const savedTheme = localStorage.getItem('theme')
+  if (savedTheme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark')
+  } else if (savedTheme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light')
+  }
 }
 
 async function loadDataset(datasetId: string) {
