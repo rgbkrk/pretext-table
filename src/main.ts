@@ -109,29 +109,19 @@ function renderShell(app: HTMLElement) {
     }
   })
 
-  // Theme toggle
-  document.getElementById('theme-toggle')!.addEventListener('click', () => {
-    const root = document.documentElement
-    const current = root.getAttribute('data-theme')
-    if (current === 'dark') {
-      root.setAttribute('data-theme', 'light')
-      localStorage.setItem('theme', 'light')
-    } else if (current === 'light') {
-      root.removeAttribute('data-theme')
-      localStorage.setItem('theme', 'system')
-    } else {
-      root.setAttribute('data-theme', 'dark')
-      localStorage.setItem('theme', 'dark')
-    }
-  })
-
-  // Restore saved theme preference
+  // Theme toggle: simple light ↔ dark
+  const root = document.documentElement
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
   const savedTheme = localStorage.getItem('theme')
-  if (savedTheme === 'dark') {
-    document.documentElement.setAttribute('data-theme', 'dark')
-  } else if (savedTheme === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light')
-  }
+  const initialDark = savedTheme ? savedTheme === 'dark' : prefersDark
+  if (initialDark) root.setAttribute('data-theme', 'dark')
+  else root.setAttribute('data-theme', 'light')
+
+  document.getElementById('theme-toggle')!.addEventListener('click', () => {
+    const isDark = root.getAttribute('data-theme') === 'dark'
+    root.setAttribute('data-theme', isDark ? 'light' : 'dark')
+    localStorage.setItem('theme', isDark ? 'light' : 'dark')
+  })
 }
 
 async function loadDataset(datasetId: string) {
