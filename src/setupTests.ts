@@ -76,5 +76,10 @@ HTMLElement.prototype.requestFullscreen = vi.fn(() => Promise.resolve())
 
 vi.mock('@chenglou/pretext', () => ({
   prepare: vi.fn(() => ({ __brand: 'PreparedText' })),
+  prepareWithSegments: vi.fn((text: string) => ({
+    __brand: 'PreparedTextWithSegments',
+    widths: [text.length * 7], // rough estimate: 7px per char
+    segments: [text],
+  })),
   layout: vi.fn(() => ({ lineCount: 1, height: 20 })),
 }))

@@ -2,18 +2,19 @@
  * Column width utilities.
  *
  * autoWidth() — initial width from header label measurement + type minimums.
- * fitColumnWidths() — refine widths by sampling actual cell data.
+ * fitColumnWidths() — refine widths by sampling actual cell data via pretext.
  */
+import { prepareWithSegments } from '@chenglou/pretext'
 import type { ColumnType, TableData } from './table'
 
 const LABEL_FONT = '600 11px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif'
 const CELL_FONT = '14px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif'
 const HEADER_CHROME = 60 // cell padding + type icon + sort arrow
-const CELL_PAD = 24      // 12px each side
+const CELL_PAD = 24      // 12px each side — matches CELL_PAD_H in table.ts
 
 let measureCanvas: CanvasRenderingContext2D | null = null
 
-/** Measure the rendered width of text using canvas */
+/** Measure the rendered width of text using canvas (used for header labels) */
 export function measureText(text: string, font: string): number {
   if (!measureCanvas) {
     if (typeof document === 'undefined') return text.length * 7
@@ -22,6 +23,19 @@ export function measureText(text: string, font: string): number {
   if (!measureCanvas) return text.length * 7
   measureCanvas.font = font
   return measureCanvas.measureText(text).width
+}
+
+/**
+ * Measure the single-line width of cell text using pretext.
+ * Sums segment widths from prepareWithSegments — this uses the same
+ * measurement engine that the table uses for layout, so column widths
+ * will match what's actually rendered.
+ */
+function measureCellText(text: string): number {
+  const prepared = prepareWithSegments(text, CELL_FONT)
+  let w = 0
+  for (let i = 0; i < prepared.widths.length; i++) w += prepared.widths[i]
+  return w
 }
 
 /** Compute initial column width from header label + type constraints */
@@ -42,6 +56,9 @@ export function autoWidth(name: string, colType: ColumnType): number {
 
 /**
  * Refine column widths by sampling actual cell data.
+ * Uses pretext prepareWithSegments for accurate text measurement —
+ * this matches the table engine's own layout calculations.
+ *
  * Uses the median single-line width — avoids outlier-driven expansion.
  * Only widens columns, never shrinks below the header-based width.
  * Narrows index columns to save space.
@@ -60,7 +77,7 @@ export function fitColumnWidths(
     if (summary && 'isIndex' in summary && (summary as any).isIndex) {
       const maxVal = (summary as any).max as number
       const formatted = maxVal != null ? Math.round(maxVal).toLocaleString() : ''
-      colWidths[c] = Math.ceil(measureText(formatted, CELL_FONT)) + CELL_PAD
+      colWidths[c] = Math.ceil(measureCellText(formatted)) + CELL_PAD
       continue
     }
 
@@ -68,7 +85,7 @@ export function fitColumnWidths(
     for (let r = 0; r < sampleSize; r++) {
       const text = data.getCell(r, c)
       if (!text) continue
-      const w = measureText(text, CELL_FONT) + CELL_PAD
+      const w = measureCellText(text) + CELL_PAD
       widths.push(w)
     }
     if (widths.length === 0) continue
