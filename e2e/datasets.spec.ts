@@ -23,9 +23,9 @@ test.describe('Dataset Picker', () => {
     await expect(description).toContainText('synthetic')
   })
 
-  test('default dataset without param is Spotify', async ({ page }) => {
+  test('default dataset without param selects Spotify in picker', async ({ page }) => {
     await page.goto('/')
-    await page.waitForSelector('.pt-table-container', { timeout: 90_000 })
+    // Just check the select value — don't wait for the table to load (requires network)
     const select = page.locator('#dataset-select')
     await expect(select).toHaveValue('spotify')
   })
