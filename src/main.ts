@@ -42,6 +42,7 @@ const generatedColumnOverrides: Record<string, Partial<Column>> = {
 // --- State ---
 let currentEngine: TableEngine | null = null
 let currentDatasetId = 'generated'
+let currentTableData: TableData | null = null
 
 // --- Boot ---
 
@@ -75,11 +76,13 @@ function renderShell(app: HTMLElement) {
               `).join('')}
             </select>
           </div>
+          <button class="pt-view-toggle" id="view-toggle" title="Toggle chart view">◫</button>
           <button class="pt-theme-toggle" id="theme-toggle" title="Toggle dark mode">◑</button>
         </div>
         <p class="pt-subtitle" id="dataset-description">${dataset.description}</p>
       </div>
       <div id="table-root"></div>
+      <div id="chart-root" style="display:none"></div>
     </div>
   `
 
@@ -112,6 +115,33 @@ function renderShell(app: HTMLElement) {
     const isDark = root.getAttribute('data-theme') === 'dark'
     root.setAttribute('data-theme', isDark ? 'light' : 'dark')
     localStorage.setItem('theme', isDark ? 'light' : 'dark')
+  })
+
+  // View toggle: table ↔ chart
+  let chartVisible = false
+  document.getElementById('view-toggle')!.addEventListener('click', () => {
+    chartVisible = !chartVisible
+    const tableRoot = document.getElementById('table-root')!
+    const chartRoot = document.getElementById('chart-root')!
+    const btn = document.getElementById('view-toggle')!
+    if (chartVisible) {
+      tableRoot.style.display = 'none'
+      chartRoot.style.display = ''
+      btn.textContent = '☰'
+      btn.title = 'Show table'
+      // Mount chart if we have data
+      if (currentTableData) {
+        import('./chart-view').then(({ mountChartView }) => {
+          mountChartView(chartRoot, currentTableData!)
+        })
+      }
+    } else {
+      tableRoot.style.display = ''
+      chartRoot.style.display = 'none'
+      btn.textContent = '◫'
+      btn.title = 'Show chart'
+      import('./chart-view').then(({ unmountChartView }) => unmountChartView())
+    }
   })
 }
 
@@ -188,6 +218,7 @@ async function loadLocalArrow(dataset: DatasetEntry, tableRoot: HTMLElement) {
   appendBatch(firstResult.value)
 
   tableRoot.innerHTML = ''
+  currentTableData = tableData
   currentEngine = createTable(tableRoot, tableData)
 
   for await (const batch of reader) {
@@ -230,6 +261,7 @@ async function loadHuggingFaceWasm(dataset: DatasetEntry, tableRoot: HTMLElement
   updateWasmSummaries(mod, handle, tableData, columns)
 
   tableRoot.innerHTML = ''
+  currentTableData = tableData
   currentEngine = createTable(tableRoot, tableData)
 
   // Stream remaining row groups progressively
