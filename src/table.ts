@@ -1,5 +1,5 @@
 import { prepare, layout, type PreparedText } from '@chenglou/pretext'
-import { animationFrameScheduler, interval, Subject, withLatestFrom, map, scan } from 'rxjs'
+import { animationFrameScheduler, interval, Subject, withLatestFrom, map, scan, throttleTime, distinctUntilChanged } from 'rxjs'
 import { renderColumnSummary, unmountColumnSummary } from './sparkline'
 import { mountColumnMenu, unmountColumnMenu, type ColumnAction } from './column-menu'
 import { fitColumnWidths } from './auto-width'
@@ -748,39 +748,64 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
   // RxJS FPS: frame counter on animationFrameScheduler, render cost from Subject
   const renderCost$ = new Subject<number>() // receives elapsed ms per render
 
-  // Flip-clock FPS display — per-digit slots with slide animation
-  statFrame.classList.add('pt-flip-clock')
-  let flipSlots: HTMLSpanElement[] = []
-  let prevDigits = ''
+  // Odometer FPS display — digit strips roll to target with spring easing
+  statFrame.classList.add('pt-odometer')
+  type OdometerSlot = { el: HTMLSpanElement; strip: HTMLSpanElement | null; current: string }
+  let odometerSlots: OdometerSlot[] = []
 
-  function updateFlipClock(text: string) {
-    // Ensure we have the right number of digit spans
-    while (flipSlots.length < text.length) {
-      const span = document.createElement('span')
-      span.className = 'pt-flip-digit'
-      statFrame.appendChild(span)
-      flipSlots.push(span)
+  function createDigitStrip(): HTMLSpanElement {
+    const strip = document.createElement('span')
+    strip.className = 'pt-odo-strip'
+    for (let d = 0; d <= 9; d++) {
+      const digit = document.createElement('span')
+      digit.className = 'pt-odo-num'
+      digit.textContent = String(d)
+      strip.appendChild(digit)
     }
-    while (flipSlots.length > text.length) {
-      statFrame.removeChild(flipSlots.pop()!)
+    return strip
+  }
+
+  function updateOdometer(text: string) {
+    // Ensure we have the right number of slots
+    while (odometerSlots.length < text.length) {
+      const el = document.createElement('span')
+      el.className = 'pt-odo-slot'
+      statFrame.appendChild(el)
+      odometerSlots.push({ el, strip: null, current: '' })
+    }
+    while (odometerSlots.length > text.length) {
+      const removed = odometerSlots.pop()!
+      statFrame.removeChild(removed.el)
     }
 
     for (let i = 0; i < text.length; i++) {
       const ch = text[i]
-      const prev = prevDigits[i]
-      const span = flipSlots[i]
+      const slot = odometerSlots[i]
 
-      if (ch !== prev) {
-        span.textContent = ch
-        // Only animate digit characters
-        if (ch >= '0' && ch <= '9') {
-          span.classList.remove('pt-flip-pop')
-          void span.offsetWidth // force reflow to restart animation
-          span.classList.add('pt-flip-pop')
+      if (ch === slot.current) continue
+
+      const isDigit = ch >= '0' && ch <= '9'
+
+      if (isDigit) {
+        // Ensure this slot has a digit strip
+        if (!slot.strip) {
+          slot.el.textContent = ''
+          slot.strip = createDigitStrip()
+          slot.el.appendChild(slot.strip)
         }
+        // Roll to the target digit (each digit is 1.2em tall)
+        const target = parseInt(ch)
+        slot.strip.style.transform = `translateY(${-target * 1.2}em)`
+      } else {
+        // Static character — no strip needed
+        if (slot.strip) {
+          slot.el.removeChild(slot.strip)
+          slot.strip = null
+        }
+        slot.el.textContent = ch
       }
+      slot.current = ch
     }
-    prevDigits = text
   }
 
   const fps$ = interval(0, animationFrameScheduler).pipe(
@@ -804,8 +829,11 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
   )
   const fpsSub = fps$.pipe(
     withLatestFrom(renderCost$),
-  ).subscribe(([fpsStr, cost]) => {
-    updateFlipClock(`${fpsStr}fps·${cost.toFixed(1)}ms`)
+    map(([fpsStr, cost]) => `${fpsStr}fps·${cost.toFixed(1)}ms`),
+    distinctUntilChanged(),
+    throttleTime(400, animationFrameScheduler, { trailing: true }),
+  ).subscribe(text => {
+    updateOdometer(text)
   })
 
   function updateStat(el: HTMLSpanElement, value: string, prev: string): string {
