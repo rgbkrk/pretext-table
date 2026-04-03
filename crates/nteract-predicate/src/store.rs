@@ -21,6 +21,9 @@ struct DataStore {
     num_cols: usize,
     col_names: Vec<String>,
     col_types: Vec<String>, // "numeric", "categorical", "boolean", "timestamp"
+    /// Original column arrays saved before casting, keyed by column index.
+    /// Used to restore original data when casting back to the original type.
+    original_columns: HashMap<usize, (Vec<arrow::array::ArrayRef>, String)>,
 }
 
 impl DataStore {
@@ -98,6 +101,7 @@ fn store_batches(batches: Vec<RecordBatch>, schema: &arrow::datatypes::Schema) -
             num_cols,
             col_names,
             col_types,
+            original_columns: HashMap::new(),
         });
     });
 
@@ -599,6 +603,7 @@ pub fn load_parquet_row_group(parquet_bytes: &[u8], row_group: usize, handle: u3
 /// Cast a column to a different type in-place.
 /// Supported casts: string→timestamp (parse ISO dates), string→numeric, etc.
 /// Uses arrow-cast for type conversion. Updates the store's column type metadata.
+/// Saves the original column data so it can be restored when casting back.
 #[wasm_bindgen]
 pub fn cast_column(handle: u32, col: usize, target_type: &str) -> Result<(), JsValue> {
     with_stores(|stores| {
@@ -612,6 +617,44 @@ pub fn cast_column(handle: u32, col: usize, target_type: &str) -> Result<(), JsV
             "categorical" => DataType::Utf8,
             _ => return Err(JsValue::from_str(&format!("Unknown target type: {}", target_type))),
         };
+
+        // Check if we have saved originals for this column and the target matches
+        if let Some((original_cols, original_type)) = store.original_columns.get(&col) {
+            if target_type == original_type {
+                // Restore original column data instead of arrow-casting
+                let mut new_batches = Vec::new();
+                for (batch_idx, batch) in store.batches.iter().enumerate() {
+                    let mut columns: Vec<arrow::array::ArrayRef> = Vec::new();
+                    for i in 0..batch.num_columns() {
+                        if i == col {
+                            columns.push(original_cols[batch_idx].clone());
+                        } else {
+                            columns.push(batch.column(i).clone());
+                        }
+                    }
+                    let mut fields: Vec<arrow::datatypes::FieldRef> = batch.schema().fields().iter().cloned().collect();
+                    fields[col] = std::sync::Arc::new(
+                        arrow::datatypes::Field::new(fields[col].name(), original_cols[batch_idx].data_type().clone(), true)
+                    );
+                    let new_schema = std::sync::Arc::new(arrow::datatypes::Schema::new(fields));
+                    new_batches.push(RecordBatch::try_new(new_schema, columns)
+                        .map_err(|e| JsValue::from_str(&format!("Batch rebuild error: {}", e)))?);
+                }
+                store.batches = new_batches;
+                store.col_types[col] = original_type.clone();
+                store.original_columns.remove(&col);
+                return Ok(());
+            }
+        }
+
+        // Save original column data before casting (only if not already saved)
+        if !store.original_columns.contains_key(&col) {
+            let originals: Vec<arrow::array::ArrayRef> = store.batches.iter()
+                .map(|b| b.column(col).clone())
+                .collect();
+            let original_type = store.col_types[col].clone();
+            store.original_columns.insert(col, (originals, original_type));
+        }
 
         // Cast the column in each batch
         let mut new_batches = Vec::new();
@@ -630,7 +673,6 @@ pub fn cast_column(handle: u32, col: usize, target_type: &str) -> Result<(), JsV
                         builder.append_null();
                     } else {
                         let s = str_arr.value(i);
-                        // Try common date formats
                         if let Ok(dt) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
                             let ts = dt.and_hms_opt(0, 0, 0).unwrap()
                                 .and_utc().timestamp_millis();

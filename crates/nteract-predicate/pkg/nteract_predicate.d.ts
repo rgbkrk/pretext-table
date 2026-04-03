@@ -5,6 +5,7 @@
  * Cast a column to a different type in-place.
  * Supported casts: string→timestamp (parse ISO dates), string→numeric, etc.
  * Uses arrow-cast for type conversion. Updates the store's column type metadata.
+ * Saves the original column data so it can be restored when casting back.
  */
 export function cast_column(handle: number, col: number, target_type: string): void;
 
