@@ -32,7 +32,7 @@ test.describe('Header Overlap', () => {
     test.setTimeout(120_000)
     await page.goto('/?dataset=titanic')
     await page.waitForSelector('.pt-table-container', { timeout: 90_000 })
-    await expect(page.locator('.pt-stat-rows')).toContainText('891', { timeout: 30_000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /891/, { timeout: 30_000 })
 
     // Wait for summaries to render
     await page.waitForTimeout(1000)

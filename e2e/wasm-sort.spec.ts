@@ -12,7 +12,7 @@ test.describe('WASM Sort (Titanic)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/?dataset=titanic')
     await page.waitForSelector('.pt-table-container', { timeout: 90_000 })
-    await expect(page.locator('.pt-stat-rows')).toContainText('891', { timeout: 30_000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /891/, { timeout: 30_000 })
   })
 
   test('sort by Age ascending shows youngest first', async ({ page }) => {
@@ -99,7 +99,7 @@ test.describe('WASM Sort (Titanic)', () => {
     await page.waitForTimeout(500)
 
     // Should show filtered count
-    await expect(page.locator('.pt-stat-rows')).toContainText('of', { timeout: 5000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /of/, { timeout: 5000 })
 
     // Now sort by Fare
     const fareTh = page.locator('.pt-th').filter({
@@ -109,7 +109,7 @@ test.describe('WASM Sort (Titanic)', () => {
     await expect(fareTh.locator('.pt-sort-arrow')).toContainText('↑', { timeout: 5000 })
 
     // Filtered count should still be shown (filter still active)
-    await expect(page.locator('.pt-stat-rows')).toContainText('of')
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /of/)
     // Filter pill should still be visible
     await expect(page.locator('.pt-filter-pill')).toHaveCount(1)
   })

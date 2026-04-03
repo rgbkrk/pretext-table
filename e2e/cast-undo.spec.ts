@@ -23,7 +23,7 @@ test.describe('Cast Column Undo (Titanic)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/?dataset=titanic')
     await page.waitForSelector('.pt-table-container', { timeout: 90_000 })
-    await expect(page.locator('.pt-stat-rows')).toContainText('891', { timeout: 30_000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /891/, { timeout: 30_000 })
   })
 
   test('cast Name to Number then back to Text restores values', async ({ page }) => {

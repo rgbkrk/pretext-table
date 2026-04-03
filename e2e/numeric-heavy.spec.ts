@@ -22,7 +22,7 @@ test.describe('Heart Failure (numeric-heavy)', () => {
 
   test('row count shows 299 rows', async ({ page }) => {
     await waitForData(page)
-    await expect(page.locator('.pt-stat-rows')).toContainText('299')
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /299/)
   })
 
   test('all numeric columns get histograms (SVG charts)', async ({ page }) => {

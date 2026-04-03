@@ -27,7 +27,7 @@ test.describe('Performance Benchmarks (100k rows)', () => {
     await page.goto('/?dataset=generated')
     await page.waitForSelector('.pt-table-container')
     // Wait for all 100k rows to stream in
-    await expect(page.locator('.pt-stat-rows')).toContainText('100,000', { timeout: 30_000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /100,000/, { timeout: 30_000 })
   })
 
   test('mount and stream all batches', async ({ page }) => {
@@ -36,7 +36,7 @@ test.describe('Performance Benchmarks (100k rows)', () => {
     await page.waitForSelector('.pt-table-container')
     const firstBatch = Date.now() - start
 
-    await expect(page.locator('.pt-stat-rows')).toContainText('100,000', { timeout: 30_000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /100,000/, { timeout: 30_000 })
     const allBatches = Date.now() - start
 
     console.log('\n📊 Mount & Stream (100k rows, 12 columns):')
