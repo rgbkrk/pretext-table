@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
-import { PretextTable } from './react'
+import { SiftTable } from './react'
 import type { TableData, Column } from './table'
 
 function makeColumns(): Column[] {
@@ -22,7 +22,7 @@ function makeTableData(rows: unknown[][]): TableData {
   }
 }
 
-describe('PretextTable', () => {
+describe('SiftTable', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -36,7 +36,7 @@ describe('PretextTable', () => {
     const rows = [[1, 'Alice', 95], [2, 'Bob', 87], [3, 'Carol', 92]]
     const data = makeTableData(rows)
 
-    const { container } = render(<PretextTable data={data} />)
+    const { container } = render(<SiftTable data={data} />)
     await vi.advanceTimersByTimeAsync(0)
 
     expect(container.querySelector('.pt-table-container')).not.toBeNull()
@@ -48,7 +48,7 @@ describe('PretextTable', () => {
     const rows = [[1, 'Alice', 95]]
     const data = makeTableData(rows)
 
-    const { container } = render(<PretextTable data={data} />)
+    const { container } = render(<SiftTable data={data} />)
     await vi.advanceTimersByTimeAsync(0)
 
     const labels = container.querySelectorAll('.pt-th-label')
@@ -62,7 +62,7 @@ describe('PretextTable', () => {
     const rows = Array.from({ length: 25 }, (_, i) => [i, `Person ${i}`, i * 10])
     const data = makeTableData(rows)
 
-    const { container } = render(<PretextTable data={data} />)
+    const { container } = render(<SiftTable data={data} />)
     await vi.advanceTimersByTimeAsync(0)
 
     const stats = container.querySelector('.pt-stat-rows')
@@ -74,7 +74,7 @@ describe('PretextTable', () => {
     const rows = Array.from({ length: 10 }, (_, i) => [i, `Person ${i}`, i * 10])
     const data = makeTableData(rows)
 
-    const { container } = render(<PretextTable data={data} onChange={onChange} />)
+    const { container } = render(<SiftTable data={data} onChange={onChange} />)
     await vi.advanceTimersByTimeAsync(0)
 
     // The engine is mounted — we can interact via the DOM
@@ -86,7 +86,7 @@ describe('PretextTable', () => {
     const rows = [[1, 'Alice', 95]]
     const data = makeTableData(rows)
 
-    const { container, unmount } = render(<PretextTable data={data} />)
+    const { container, unmount } = render(<SiftTable data={data} />)
     await vi.advanceTimersByTimeAsync(0)
 
     expect(container.querySelector('.pt-table-container')).not.toBeNull()
@@ -101,7 +101,7 @@ describe('PretextTable', () => {
     // Mock fetch to never resolve (simulating slow load)
     vi.stubGlobal('fetch', () => new Promise(() => {}))
 
-    const { container } = render(<PretextTable url="/data.arrow" />)
+    const { container } = render(<SiftTable url="/data.arrow" />)
     await vi.advanceTimersByTimeAsync(0)
 
     expect(container.querySelector('.pt-loading')).not.toBeNull()
@@ -114,7 +114,7 @@ describe('PretextTable', () => {
     vi.useRealTimers()
     vi.stubGlobal('fetch', () => Promise.resolve({ ok: false, status: 404, statusText: 'Not Found' }))
 
-    const { container } = render(<PretextTable url="/missing.arrow" />)
+    const { container } = render(<SiftTable url="/missing.arrow" />)
 
     // Wait for the async fetch to resolve and state to update
     await new Promise(r => setTimeout(r, 50))
@@ -131,7 +131,7 @@ describe('PretextTable', () => {
     const data = makeTableData(rows)
 
     const { container } = render(
-      <PretextTable data={data} className="my-table" style={{ border: '1px solid red' }} />
+      <SiftTable data={data} className="my-table" style={{ border: '1px solid red' }} />
     )
     await vi.advanceTimersByTimeAsync(0)
 

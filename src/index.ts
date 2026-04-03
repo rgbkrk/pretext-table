@@ -1,21 +1,21 @@
 /**
- * pretext-table — public API
+ * @nteract/data-explorer — public API
  *
  * React component:
- *   import { PretextTable } from 'pretext-table'
- *   <PretextTable url="/data.arrow" onChange={handleState} />
+ *   import { SiftTable } from '@nteract/data-explorer'
+ *   <SiftTable url="/data.arrow" onChange={handleState} />
  *
  * Imperative engine:
- *   import { createTable } from 'pretext-table'
+ *   import { createTable } from '@nteract/data-explorer'
  *   const engine = createTable(container, tableData)
  *
  * State serialization:
- *   import { engineStateToExplorerState, predicateToSQL } from 'pretext-table'
+ *   import { engineStateToExplorerState, predicateToSQL } from '@nteract/data-explorer'
  */
 
 // React component
-export { PretextTable, usePretextEngine } from './react'
-export type { PretextTableProps, PretextTableHandle } from './react'
+export { SiftTable, useSiftEngine } from './react'
+export type { SiftTableProps, SiftTableHandle } from './react'
 
 // Imperative engine
 export { createTable } from './table'
