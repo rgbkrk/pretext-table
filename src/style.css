@@ -702,6 +702,33 @@ h1 {
   100% { color: var(--muted); }
 }
 
+/* --- Status indicator --- */
+
+.pt-status-indicator {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 8px;
+  line-height: 1;
+  vertical-align: middle;
+  transition: color 400ms ease, opacity 400ms ease;
+}
+
+.pt-status-streaming {
+  color: var(--accent);
+  animation: pt-status-pulse 1s ease-in-out infinite;
+}
+
+.pt-status-ready {
+  color: var(--muted);
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+@keyframes pt-status-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
 /* --- Filter pills --- */
 
 .pt-filter-pills {

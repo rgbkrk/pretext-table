@@ -554,17 +554,22 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     return el
   }
 
+  // Status indicator (streaming dot → checkmark)
+  const statusIndicator = document.createElement('span')
+  statusIndicator.className = 'pt-status-indicator pt-status-streaming'
+  statusIndicator.textContent = '●'
+  statusIndicator.title = 'Loading data…'
+
   const statRows = makeStatSpan('pt-stat-rows')
   const statRange = makeStatSpan('pt-stat-range')
   const statDom = makeStatSpan('pt-stat-dom')
   const statFrame = makeStatSpan('pt-stat-frame')
 
   function updateRowCountDisplay() {
-    const suffix = streaming ? ' …' : ''
     if (hasActiveFilters()) {
-      statRows.textContent = `${filteredCount.toLocaleString()} of ${rowCount.toLocaleString()} rows${suffix}`
+      statRows.textContent = `${filteredCount.toLocaleString()} of ${rowCount.toLocaleString()} rows`
     } else {
-      statRows.textContent = `${rowCount.toLocaleString()} rows${suffix}`
+      statRows.textContent = `${rowCount.toLocaleString()} rows`
     }
   }
   updateRowCountDisplay()
@@ -599,7 +604,7 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
   const statsSpacer = document.createElement('div')
   statsSpacer.style.flex = '1'
 
-  statsEl.append(statRows, sep(), statRange, sep(), statDom, sep(), statFrame, filterPillsEl, statsSpacer, fullscreenBtn)
+  statsEl.append(statusIndicator, statRows, sep(), statRange, sep(), statDom, sep(), statFrame, filterPillsEl, statsSpacer, fullscreenBtn)
   container.appendChild(statsEl)
 
   // Streaming progress bar — at the bottom of the table, below the stats bar
@@ -1056,6 +1061,11 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     streaming = false
     progressBar.classList.add('pt-progress-bar-done')
     updateRowCountDisplay()
+    // Switch status indicator from streaming dot to checkmark
+    statusIndicator.classList.remove('pt-status-streaming')
+    statusIndicator.classList.add('pt-status-ready')
+    statusIndicator.textContent = '✓'
+    statusIndicator.title = 'All data loaded'
     // Remove the progress bar from DOM after fade-out transition
     progressBar.addEventListener('transitionend', () => progressBar.remove(), { once: true })
   }
