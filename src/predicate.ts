@@ -5,6 +5,12 @@
  * initial page load for users who don't need compute operations.
  */
 
+/** Filter spec passed to WASM store_filter_rows. */
+export type FilterSpecJson =
+  | { kind: 'range'; col: number; min: number; max: number }
+  | { kind: 'set'; col: number; values: string[] }
+  | { kind: 'boolean'; col: number; value: boolean }
+
 type PredicateModule = {
   // Data store
   load_ipc(ipc_bytes: Uint8Array): number
@@ -32,6 +38,8 @@ type PredicateModule = {
   store_filtered_value_counts(handle: number, col: number, mask: Uint8Array): { label: string; count: number }[]
   store_filtered_histogram(handle: number, col: number, mask: Uint8Array, num_bins: number): { x0: number; x1: number; count: number }[]
   store_filtered_bool_counts(handle: number, col: number, mask: Uint8Array): Uint32Array
+  // Store-based filter (applies predicates in Rust, returns matching row indices)
+  store_filter_rows(handle: number, filters: FilterSpecJson[]): Uint32Array
   // Viewport access (returns Arrow IPC for visible rows)
   get_viewport(handle: number, start_row: number, end_row: number): Uint8Array
   get_viewport_by_indices(handle: number, indices: Uint32Array): Uint8Array
