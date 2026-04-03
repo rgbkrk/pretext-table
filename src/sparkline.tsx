@@ -108,6 +108,79 @@ function BrushLayer({ width, min, max, activeFilter, onFilter }: {
   )
 }
 
+// --- Binary numeric ratio bar (0/1 or two-value columns) ---
+
+/** Renders numeric columns with exactly 2 unique values as a boolean-style ratio bar. */
+function BinaryNumericRatioBar({ summary, activeFilter, onFilter }: {
+  summary: NumericColumnSummary
+  activeFilter?: RangeFilter | null
+  onFilter: FilterCallback
+}) {
+  // Find the two values and their counts from bins
+  const nonEmpty = summary.bins.filter(b => b.count > 0)
+  const lowBin = nonEmpty[0]
+  const highBin = nonEmpty[nonEmpty.length - 1]
+  if (!lowBin || !highBin) return null
+
+  const total = lowBin.count + highBin.count
+  const lowPct = Math.round((lowBin.count / total) * 1000) / 10
+  const highPct = Math.round((highBin.count / total) * 1000) / 10
+
+  const isIntegerColumn = Number.isInteger(summary.min) && Number.isInteger(summary.max)
+  const lowLabel = isIntegerColumn ? String(Math.round((lowBin.x0 + lowBin.x1) / 2)) : formatNum((lowBin.x0 + lowBin.x1) / 2)
+  const highLabel = isIntegerColumn ? String(Math.round((highBin.x0 + highBin.x1) / 2)) : formatNum((highBin.x0 + highBin.x1) / 2)
+
+  // Determine which segment is "active" based on range filter
+  const lowActive = !activeFilter || (lowBin.x1 > activeFilter.min && lowBin.x0 < activeFilter.max)
+  const highActive = !activeFilter || (highBin.x1 > activeFilter.min && highBin.x0 < activeFilter.max)
+
+  return (
+    <div className="pt-bool-summary">
+      <div className="pt-bool-bar">
+        <div
+          className="pt-bool-true pt-bool-clickable"
+          style={{ width: `${lowPct}%`, opacity: activeFilter && !lowActive ? 0.3 : 1 }}
+          onClick={() => {
+            if (activeFilter && activeFilter.min === lowBin.x0 && activeFilter.max === lowBin.x1) {
+              onFilter(null)
+            } else {
+              onFilter({ kind: 'range', min: lowBin.x0, max: lowBin.x1 })
+            }
+          }}
+        />
+        <div
+          className="pt-bool-false pt-bool-clickable"
+          style={{ width: `${highPct}%`, opacity: activeFilter && !highActive ? 0.3 : 1 }}
+          onClick={() => {
+            if (activeFilter && activeFilter.min === highBin.x0 && activeFilter.max === highBin.x1) {
+              onFilter(null)
+            } else {
+              onFilter({ kind: 'range', min: highBin.x0, max: highBin.x1 })
+            }
+          }}
+        />
+      </div>
+      <div className="pt-bool-labels">
+        <span>{lowLabel} {lowPct}%</span>
+        <span>{highLabel} {highPct}%</span>
+      </div>
+    </div>
+  )
+}
+
+// --- High-cardinality unique count display ---
+
+/** Renders a simple unique count for high-cardinality columns with long text. */
+function HighCardinalityText({ summary }: {
+  summary: CategoricalColumnSummary
+}) {
+  return (
+    <div className="pt-cat-summary">
+      <span className="pt-th-range">{summary.uniqueCount.toLocaleString()} unique values</span>
+    </div>
+  )
+}
+
 // --- Low-cardinality numeric bars ---
 
 /** Renders numeric columns with few unique values as categorical-style bars. */
@@ -181,6 +254,11 @@ function NumericHistogram({ summary, width, visibleBins, activeFilter, onFilter 
         </span>
       </div>
     )
+  }
+
+  // Binary numeric (exactly 2 unique values like 0/1): show as ratio bar
+  if (summary.uniqueCount !== undefined && summary.uniqueCount === 2) {
+    return <BinaryNumericRatioBar summary={summary} activeFilter={activeFilter} onFilter={onFilter} />
   }
 
   // Low-cardinality: show as categorical bars instead of histogram
@@ -525,6 +603,11 @@ function formatDateRange(minMs: number, maxMs: number): [string, string] {
   const max = new Date(maxMs)
   const spanDays = (maxMs - minMs) / (1000 * 60 * 60 * 24)
 
+  if (spanDays < 1) {
+    // < 24 hours: show time only
+    const fmt = (d: Date) => d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    return [fmt(min), fmt(max)]
+  }
   if (spanDays > 730) {
     // > 2 years: just show years
     return [
@@ -628,6 +711,10 @@ function ColumnSummaryChart({ summary, unfilteredSummary, width, visibleBins, ac
     case 'boolean':
       return <BooleanRatioBar summary={summary} activeFilter={activeFilter} onFilter={onFilter} />
     case 'categorical': {
+      // High-cardinality with long text (e.g. track_id, URLs): just show unique count
+      if (summary.uniqueCount > 1000 && summary.medianTextLength > 30) {
+        return <HighCardinalityText summary={summary} />
+      }
       const unfilteredCategorical = unfilteredSummary?.kind === 'categorical' ? unfilteredSummary : undefined
       return <CategoricalBars summary={summary} unfilteredAllCategories={unfilteredCategorical?.allCategories} activeFilter={activeFilter} onFilter={onFilter} />
     }

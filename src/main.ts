@@ -379,6 +379,10 @@ function updateWasmSummaries(
         const topCategories = allCategories.slice(0, 3)
         const othersCount = counts.slice(3).reduce((s, e) => s + e.count, 0)
         const othersPct = Math.round((othersCount / numRows) * 1000) / 10
+        // Compute median text length across unique values
+        const lengths = counts.map(({ label }) => label.length).sort((a, b) => a - b)
+        const medianTextLength = lengths.length > 0 ? lengths[Math.floor(lengths.length / 2)] : 0
+
         return {
           kind: 'categorical' as const,
           uniqueCount: counts.length,
@@ -386,6 +390,7 @@ function updateWasmSummaries(
           othersCount,
           othersPct,
           allCategories,
+          medianTextLength,
         }
       }
       case 'boolean': {

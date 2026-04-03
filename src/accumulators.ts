@@ -229,6 +229,13 @@ export class CategoricalAccumulator implements SummaryAccumulator {
     const topCategories = allCategories.slice(0, TOP_CATEGORIES)
     const othersCount = sorted.slice(TOP_CATEGORIES).reduce((s, e) => s + e[1], 0)
     const othersPct = Math.round((othersCount / totalRows) * 1000) / 10
+
+    // Compute median text length across unique values
+    const lengths = sorted.map(([label]) => label.length).sort((a, b) => a - b)
+    const medianTextLength = lengths.length > 0
+      ? lengths[Math.floor(lengths.length / 2)]
+      : 0
+
     return {
       kind: 'categorical',
       uniqueCount: this.freq.size,
@@ -236,6 +243,7 @@ export class CategoricalAccumulator implements SummaryAccumulator {
       othersCount,
       othersPct,
       allCategories,
+      medianTextLength,
     } satisfies CategoricalColumnSummary
   }
 }
