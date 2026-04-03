@@ -296,11 +296,18 @@ function updateWasmSummaries(
           max: bins[bins.length - 1].x1,
           bins,
         }
-        // Detect low cardinality for numeric columns: count non-zero bins as a proxy for unique values
         if (col.columnType === 'numeric') {
           const nonZeroBins = bins.filter(b => b.count > 0).length
+          // Detect low cardinality: count non-zero bins as a proxy for unique values
           if (nonZeroBins <= 10) {
             summary.uniqueCount = nonZeroBins
+          }
+          // Detect index/ID columns: uniform distribution + name pattern or high fill
+          const isUniform = nonZeroBins === bins.length &&
+            bins.every(b => b.count > 0 && b.count < numRows / (BIN_COUNT * 0.3))
+          const isIndexName = /^(unnamed[: _]?\d*|index|_?id|rowid|row_?id|row_?num)$/i.test(col.key)
+          if (isUniform || isIndexName) {
+            ;(summary as any).isIndex = true
           }
         }
         return summary

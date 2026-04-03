@@ -25,11 +25,13 @@ describe('NumericAccumulator', () => {
     expect(result.bins.reduce((s, b) => s + b.count, 0)).toBe(data.length)
   })
 
-  it('returns null for monotonically increasing data with no special values', () => {
+  it('marks monotonically increasing data as index', () => {
     const acc = new NumericAccumulator()
     const data = [1, 2, 3, 4, 5]
     acc.add(data, 0, data.length)
-    expect(acc.snapshot()).toBeNull()
+    const result = acc.snapshot(5) as any
+    expect(result).not.toBeNull()
+    expect(result.isIndex).toBe(true)
   })
 
   it('excludes NaN, Infinity, -Infinity, null from bins', () => {
@@ -60,11 +62,14 @@ describe('NumericAccumulator', () => {
     expect(acc.snapshot()).toBeNull()
   })
 
-  it('handles all identical values', () => {
+  it('handles all identical values (not an index)', () => {
     const acc = new NumericAccumulator()
     const data = [42, 42, 42, 42, 42, 42, 42, 42, 42, 42]
     acc.add(data, 0, data.length)
-    expect(acc.snapshot()).toBeNull()
+    const result = acc.snapshot(10) as any
+    expect(result).not.toBeNull()
+    expect(result.kind).toBe('numeric')
+    expect(result.isIndex).toBeFalsy()
   })
 
   it('handles incremental batches', () => {
