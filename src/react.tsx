@@ -1,11 +1,11 @@
 /**
- * React wrapper for the pretext-table engine.
+ * React wrapper for the Sift table engine.
  *
  * Usage:
- *   <PretextTable data={tableData} onChange={handleState} />
+ *   <SiftTable data={tableData} onChange={handleState} />
  *
  * Or with Arrow IPC URL:
- *   <PretextTable url="/data.arrow" onChange={handleState} />
+ *   <SiftTable url="/data.arrow" onChange={handleState} />
  *
  * The component manages the imperative TableEngine lifecycle —
  * mounting on first render, updating on data changes, and
@@ -35,7 +35,7 @@ import {
 
 // --- Props ---
 
-export type PretextTableProps = {
+export type SiftTableProps = {
   /** Pre-built TableData object. Mutually exclusive with `url`. */
   data?: TableData
   /** Arrow IPC URL to stream from. Mutually exclusive with `data`. */
@@ -101,7 +101,7 @@ function buildTableState(
 
 // --- Component ---
 
-export function PretextTable({
+export function SiftTable({
   data,
   url,
   typeOverrides,
@@ -109,7 +109,7 @@ export function PretextTable({
   onChange,
   className,
   style,
-}: PretextTableProps) {
+}: SiftTableProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<TableEngine | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
@@ -251,7 +251,7 @@ export function PretextTable({
 
 // --- Imperative handle for advanced use ---
 
-export type PretextTableHandle = {
+export type SiftTableHandle = {
   engine: TableEngine | null
   setFilter: (colIndex: number, filter: ColumnFilter) => void
   clearAllFilters: () => void
@@ -260,10 +260,10 @@ export type PretextTableHandle = {
 
 /**
  * Hook to get an imperative handle to the table engine.
- * Use with a ref: const handleRef = usePretextHandle()
- * Then pass handleRef to PretextTable (not yet wired — future forwardRef).
+ * Use with a ref: const handleRef = useSiftHandle()
+ * Then pass handleRef to SiftTable (not yet wired — future forwardRef).
  */
-export function usePretextEngine(engine: TableEngine | null): PretextTableHandle {
+export function useSiftEngine(engine: TableEngine | null): SiftTableHandle {
   return {
     engine,
     setFilter: (colIndex, filter) => engine?.setFilter(colIndex, filter),
