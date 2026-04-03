@@ -710,6 +710,38 @@ h1 {
   100% { color: var(--muted); }
 }
 
+/* --- Flip-clock FPS counter --- */
+
+.pt-flip-clock {
+  display: inline-flex;
+  gap: 0;
+  line-height: 1;
+}
+
+.pt-flip-slot {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  height: 1.2em;
+  vertical-align: bottom;
+}
+
+.pt-flip-digit {
+  display: block;
+  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pt-flip-out {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translateY(-100%);
+}
+
+.pt-flip-in {
+  transform: translateY(100%);
+}
+
 /* --- Status indicator --- */
 
 .pt-status-indicator {
