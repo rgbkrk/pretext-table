@@ -451,6 +451,32 @@ function BooleanRatioBar({ summary, activeFilter, onFilter }: {
 
 // --- Timestamp histogram ---
 
+function formatDateRange(minMs: number, maxMs: number): [string, string] {
+  const min = new Date(minMs)
+  const max = new Date(maxMs)
+  const spanDays = (maxMs - minMs) / (1000 * 60 * 60 * 24)
+
+  if (spanDays > 730) {
+    // > 2 years: just show years
+    return [
+      min.toLocaleDateString(undefined, { year: 'numeric' }),
+      max.toLocaleDateString(undefined, { year: 'numeric' }),
+    ]
+  }
+  if (spanDays > 60) {
+    // > 2 months: month + year
+    return [
+      min.toLocaleDateString(undefined, { year: 'numeric', month: 'short' }),
+      max.toLocaleDateString(undefined, { year: 'numeric', month: 'short' }),
+    ]
+  }
+  // < 2 months: full date
+  return [
+    min.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+    max.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+  ]
+}
+
 function TimestampHistogram({ summary, width, visibleBins, activeFilter, onFilter }: {
   summary: TimestampColumnSummary
   width: number
@@ -458,8 +484,7 @@ function TimestampHistogram({ summary, width, visibleBins, activeFilter, onFilte
   activeFilter?: RangeFilter | null
   onFilter: FilterCallback
 }) {
-  const minDate = new Date(summary.min).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
-  const maxDate = new Date(summary.max).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })
+  const [minLabel, maxLabel] = formatDateRange(summary.min, summary.max)
 
   const data = summary.bins.map((bin, i) => ({ bin: i, count: bin.count }))
   const hasOverlay = visibleBins && Math.max(...visibleBins) > 0
@@ -485,7 +510,7 @@ function TimestampHistogram({ summary, width, visibleBins, activeFilter, onFilte
         {hasOverlay && <VisibleOverlay bins={summary.bins} visibleBins={visibleBins} width={width} />}
         <BrushLayer width={width} min={summary.min} max={summary.max} activeFilter={activeFilter} onFilter={onFilter} />
       </div>
-      <span className="pt-th-range">{minDate} – {maxDate}</span>
+      <span className="pt-th-range">{minLabel} – {maxLabel}</span>
     </div>
   )
 }
