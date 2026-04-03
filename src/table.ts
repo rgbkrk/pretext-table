@@ -44,6 +44,8 @@ export type CategoricalColumnSummary = {
   othersPct: number
   /** All categories sorted by frequency (descending). Used by the filter popover. */
   allCategories: CategoryEntry[]
+  /** Median string length across all unique values. Used for display heuristics. */
+  medianTextLength: number
 }
 
 export type BooleanColumnSummary = {
