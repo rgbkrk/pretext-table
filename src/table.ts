@@ -1486,6 +1486,8 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     // Numeric/timestamp — check if range narrowed
     if ((full.kind === 'numeric' && filtered.kind === 'numeric') ||
         (full.kind === 'timestamp' && filtered.kind === 'timestamp')) {
+      // Binary numeric columns show selection via the ratio bar — no need for "values hidden"
+      if (full.kind === 'numeric' && (full as any).uniqueCount === 2) return null
       if (full.min !== filtered.min || full.max !== filtered.max) {
         return 'values hidden'
       }
