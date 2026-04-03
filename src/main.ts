@@ -19,7 +19,8 @@ import { DATASETS, type DatasetEntry } from './datasets'
 import { resolveHuggingFaceParquetUrl } from './parquet-loader'
 import { getModuleSync } from './predicate'
 import { createWasmTableData } from './wasm-table-data'
-import { autoWidth, measureText } from './auto-width'
+import { autoWidth } from './auto-width'
+import { prepare, layout } from '@chenglou/pretext'
 import './style.css'
 
 // --- Column definitions for the generated dataset ---
@@ -259,9 +260,18 @@ async function loadHuggingFaceWasm(dataset: DatasetEntry, tableRoot: HTMLElement
   const isIndexName = (name: string) => /^(unnamed[: _]?\d*|index|_?id|rowid|row_?id|row_?num)$/i.test(name)
   for (const col of columns) {
     if (pandasIndexCols.has(col.key) || isIndexName(col.key)) {
-      // Size to fit the max row number — known upfront from parquet metadata
+      // Size to fit the max row number — use pretext to measure accurately
       const maxLabel = totalRows.toLocaleString()
-      col.width = Math.ceil(measureText(maxLabel, '14px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif')) + 24
+      const prepared = prepare(maxLabel, '14px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif')
+      // Find the minimum width where it fits on one line
+      const LINE_HEIGHT = 20
+      let w = 40
+      while (w < 200) {
+        const { lineCount } = layout(prepared, w, LINE_HEIGHT)
+        if (lineCount <= 1) break
+        w += 10
+      }
+      col.width = w + 24 // cell padding
       col.sortable = false
       // Hide labels for pandas artifacts — not real column names users would query
       if (/^(unnamed[: _]?\d*|__index_level_\d+__)$/i.test(col.key)) col.label = ''
