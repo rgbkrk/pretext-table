@@ -720,7 +720,11 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     return s
   }
 
-  let prevRange = '', prevDom = '', prevFrame = ''
+  let prevRange = '', prevDom = '', prevFps = ''
+
+  // FPS from actual render timestamps — only counts frames where we did work
+  const FPS_WINDOW = 30
+  const renderTimestamps: number[] = []
 
   function updateStat(el: HTMLSpanElement, value: string, prev: string): string {
     if (value !== prev) {
@@ -982,10 +986,22 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     const elapsed = performance.now() - t0
     const rangeStr = `showing ${first}–${Math.min(last, filteredCount - 1)}`
     const domStr = `${pool.filter(p => p.assignedRow !== -1).length} DOM rows`
-    const frameStr = `${elapsed.toFixed(1)}ms frame`
+
+    // FPS from actual render timestamps
+    const now = performance.now()
+    renderTimestamps.push(now)
+    if (renderTimestamps.length > FPS_WINDOW) renderTimestamps.shift()
+    const span = renderTimestamps.length > 1
+      ? renderTimestamps[renderTimestamps.length - 1] - renderTimestamps[0]
+      : 0
+    const fpsStr = span > 0
+      ? `${Math.round(((renderTimestamps.length - 1) / span) * 1000)} fps`
+      : '– fps'
+    const elapsedStr = `${elapsed.toFixed(1)}ms`
+
     prevRange = updateStat(statRange, rangeStr, prevRange)
     prevDom = updateStat(statDom, domStr, prevDom)
-    prevFrame = updateStat(statFrame, frameStr, prevFrame)
+    prevFps = updateStat(statFrame, `${fpsStr}·${elapsedStr}`, prevFps)
   }
 
   // --- Scroll handler ---
@@ -1194,7 +1210,7 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
   // --- Destroy ---
 
   function destroy() {
-    // Cancel pending render
+    // Cancel pending render + FPS tracker
     if (scheduledRaf !== null) {
       cancelAnimationFrame(scheduledRaf)
       scheduledRaf = null
