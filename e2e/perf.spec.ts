@@ -79,13 +79,14 @@ test.describe('Performance Benchmarks (100k rows)', () => {
   })
 
   test('sort response time', async ({ page }) => {
-    const scoreTh = page.locator('.pt-th', { hasText: 'SCORE' })
+    const scoreTh = page.locator('.pt-th').filter({ hasText: 'Score' })
 
     const sortTime = await page.evaluate(() => {
       return new Promise<number>(resolve => {
-        const th = document.querySelector('.pt-th:nth-child(8)') as HTMLElement
+        // Click .pt-th-top (sort handler) not .pt-th (outer container)
+        const top = document.querySelector('.pt-th:nth-child(8) .pt-th-top') as HTMLElement
         const t0 = performance.now()
-        th.click()
+        top.click()
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             resolve(performance.now() - t0)
