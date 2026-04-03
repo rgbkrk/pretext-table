@@ -957,6 +957,8 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     rowPool.style.display = ''
 
     const headerH = headerEl.offsetHeight
+    // Always keep the row pool below the sticky header
+    rowPool.style.top = headerH + 'px'
     const scrollTop = Math.max(0, viewport.scrollTop - headerH)
     const viewportH = viewport.clientHeight
 
