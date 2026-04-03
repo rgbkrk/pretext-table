@@ -9,7 +9,7 @@
       "import": "./lib/index.js",
       "types": "./src/index.ts"
     },
-    "./style.css": "./src/style.css"
+    "./style.css": "./lib/style.css"
   },
   "files": [
     "lib",
@@ -19,7 +19,7 @@
     "generate": "npx tsx src/generate-data.ts",
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:lib": "tsc && vite build --config vite.lib.config.ts",
+    "build:lib": "tsc && vite build --config vite.lib.config.ts && npx @tailwindcss/cli -i src/style.css -o lib/style.css --minify",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
