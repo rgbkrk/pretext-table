@@ -19,7 +19,7 @@ test.describe('Cast during streaming', () => {
       await page.waitForTimeout(300)
 
       // Should see the "available after loading" message, not cast options
-      await expect(page.getByText('Type casting available after loading')).toBeVisible()
+      await expect(page.getByText('Some operations hidden while loading')).toBeVisible()
 
       // Close menu
       await page.keyboard.press('Escape')
