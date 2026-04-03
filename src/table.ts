@@ -1064,6 +1064,17 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
 
   scheduleRender()
 
+  // Watch for header height changes (e.g. when React summary charts mount async)
+  // so rowPool.style.top stays in sync
+  let headerResizeObserver: ResizeObserver | null = null
+  if (typeof ResizeObserver !== 'undefined') {
+    headerResizeObserver = new ResizeObserver(() => {
+      heightsDirty = true
+      scheduleRender()
+    })
+    headerResizeObserver.observe(headerEl)
+  }
+
   // --- Keyboard navigation ---
 
   container.tabIndex = 0
@@ -1118,7 +1129,8 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
       scheduledRaf = null
     }
 
-    // Remove event listeners
+    // Remove event listeners and observers
+    headerResizeObserver?.disconnect()
     viewport.removeEventListener('scroll', onScroll)
 
     container.removeEventListener('keydown', onKeyDown)
