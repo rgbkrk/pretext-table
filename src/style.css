@@ -518,7 +518,11 @@ h1 {
   overflow-y: auto;
   overflow-x: auto;
   overscroll-behavior-x: none; /* prevent elastic bounce at horizontal edges */
+  overscroll-behavior-y: contain; /* prevent scroll chaining to parent */
+  overflow-anchor: none; /* disable browser scroll anchoring — fights virtual scroll */
   position: relative;
+  contain: strict;
+  will-change: scroll-position;
 }
 
 .pt-scroll-content {
@@ -531,6 +535,18 @@ h1 {
   top: 0;
   left: 0;
   width: max-content;
+  contain: content;
+  will-change: transform;
+}
+
+.pt-scroll-spacer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  will-change: transform;
 }
 
 /* --- Rows & cells --- */
@@ -541,6 +557,7 @@ h1 {
   display: flex;
   width: max-content;
   border-bottom: 1px solid color-mix(in srgb, var(--rule) 40%, transparent);
+  contain: layout style;
 }
 
 .pt-row-alt {

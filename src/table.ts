@@ -574,8 +574,14 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
   const rowPool = document.createElement('div')
   rowPool.className = 'pt-row-pool'
 
+  // Spacer: 1px element scaled to total content height via transform (avoids layout thrash)
+  const spacer = document.createElement('div')
+  spacer.className = 'pt-scroll-spacer'
+  spacer.style.transformOrigin = '0 0'
+
   scrollContent.appendChild(headerEl) // Header inside scroll content for natural H scroll
   scrollContent.appendChild(rowPool)
+  scrollContent.appendChild(spacer)
 
   // Empty state (shown when filters exclude all rows)
   const emptyEl = document.createElement('div')
@@ -973,7 +979,7 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
       // Account for header height — row pool is absolute inside scroll-content
       const headerH = headerEl.offsetHeight
       rowPool.style.top = headerH + 'px'
-      scrollContent.style.height = (totalHeight + headerH) + 'px'
+      spacer.style.transform = `scaleY(${totalHeight + headerH})`
     }
 
     if (filteredCount === 0) {
@@ -1061,7 +1067,7 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     // and re-render with corrected positions
     if (lazyPrepared) {
       rebuildPositions()
-      scrollContent.style.height = totalHeight + 'px'
+      spacer.style.transform = `scaleY(${totalHeight + headerEl.offsetHeight})`
       // Reset all assignments so the next pass positions them correctly
       for (const pr of pool) {
         pr.assignedRow = -1
