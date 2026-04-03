@@ -26,6 +26,17 @@ export function measureText(text: string, font: string): number {
 }
 
 /**
+ * Measure the single-line width of header label text using pretext.
+ * Uses the same measurement engine as cell text for consistency.
+ */
+function measureHeaderText(text: string): number {
+  const prepared = prepareWithSegments(text, LABEL_FONT)
+  let w = 0
+  for (let i = 0; i < prepared.widths.length; i++) w += prepared.widths[i]
+  return w
+}
+
+/**
  * Measure the single-line width of cell text using pretext.
  * Sums segment widths from prepareWithSegments — this uses the same
  * measurement engine that the table uses for layout, so column widths
@@ -40,7 +51,7 @@ function measureCellText(text: string): number {
 
 /** Compute initial column width from header label + type constraints */
 export function autoWidth(name: string, colType: ColumnType): number {
-  const labelW = measureText(name.toUpperCase(), LABEL_FONT) + HEADER_CHROME
+  const labelW = measureHeaderText(name.toUpperCase()) + HEADER_CHROME
 
   switch (colType) {
     case 'boolean':
