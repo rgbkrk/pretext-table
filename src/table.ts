@@ -351,12 +351,11 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
   container.setAttribute('role', 'grid')
   container.setAttribute('aria-label', 'Data table')
 
-  // Streaming progress bar — indeterminate bar at the top of the table
+  // Streaming state — progress bar is appended after stats bar below
   let streaming = true
   const progressBar = document.createElement('div')
   progressBar.className = 'pt-progress-bar'
   progressBar.innerHTML = '<div class="pt-progress-bar-fill"></div>'
-  container.appendChild(progressBar)
 
   // Header — lives inside the scroll content so it scrolls
   // horizontally with the data. position: sticky keeps it at top.
@@ -571,6 +570,9 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
 
   statsEl.append(statRows, sep(), statRange, sep(), statDom, sep(), statFrame, filterPillsEl, statsSpacer, fullscreenBtn)
   container.appendChild(statsEl)
+
+  // Streaming progress bar — at the bottom of the table, below the stats bar
+  container.appendChild(progressBar)
 
   // Expand columns to fill container width when there are few columns
   {
