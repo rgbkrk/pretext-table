@@ -72,6 +72,8 @@ export type TableData = {
   prefetchViewport?: (dataRowIndices: number[]) => void
   /** Optional: cast a column to a different type (WASM type override). */
   castColumn?: (colIndex: number, targetType: ColumnType) => void
+  /** Optional: return sorted row indices for a column (WASM sort optimization). */
+  sortColumn?: (colIndex: number, ascending: boolean) => Uint32Array
 }
 
 // --- Filter types ---
@@ -295,44 +297,60 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     // Step 2: sort the filtered set
     if (sortState) {
       const { col, dir } = sortState
-      const colType = columns[col].columnType
-      const isNumeric = colType === 'numeric' || colType === 'timestamp'
-      filtered.sort((a, b) => {
-        let cmp: number
-        if (isNumeric) {
-          const rawA = data.getCellRaw(a, col)
-          const rawB = data.getCellRaw(b, col)
-          const va = rawA == null ? NaN : Number(rawA)
-          const vb = rawB == null ? NaN : Number(rawB)
-          const aOk = Number.isFinite(va) || va === Infinity || va === -Infinity
-          const bOk = Number.isFinite(vb) || vb === Infinity || vb === -Infinity
-          if (!aOk && !bOk) cmp = 0
-          else if (!aOk) return 1
-          else if (!bOk) return -1
-          else cmp = va - vb
-        } else if (colType === 'boolean') {
-          const rawA = data.getCellRaw(a, col)
-          const rawB = data.getCellRaw(b, col)
-          // Nulls always sort to the end
-          if (rawA == null && rawB == null) cmp = 0
-          else if (rawA == null) return 1
-          else if (rawB == null) return -1
-          else cmp = (rawA ? 1 : 0) - (rawB ? 1 : 0)
+      if (data.sortColumn) {
+        // WASM fast path: get sorted indices for all rows, then intersect with filter
+        const sortedAll = data.sortColumn(col, dir === 'asc')
+        if (hasActiveFilters()) {
+          const filterSet = new Set(filtered)
+          filtered.length = 0
+          for (let i = 0; i < sortedAll.length; i++) {
+            if (filterSet.has(sortedAll[i])) filtered.push(sortedAll[i])
+          }
         } else {
-          const rawA = data.getCellRaw(a, col)
-          const rawB = data.getCellRaw(b, col)
-          // Nulls always sort to the end
-          if (rawA == null && rawB == null) cmp = 0
-          else if (rawA == null) return 1
-          else if (rawB == null) return -1
-          else {
-            const sa = data.getCell(a, col)
-            const sb = data.getCell(b, col)
-            cmp = sa < sb ? -1 : sa > sb ? 1 : 0
+          filtered.length = 0
+          for (let i = 0; i < sortedAll.length; i++) {
+            filtered.push(sortedAll[i])
           }
         }
-        return dir === 'asc' ? cmp : -cmp
-      })
+      } else {
+        // JS fallback: sort the filtered set with comparators
+        const colType = columns[col].columnType
+        const isNumeric = colType === 'numeric' || colType === 'timestamp'
+        filtered.sort((a, b) => {
+          let cmp: number
+          if (isNumeric) {
+            const rawA = data.getCellRaw(a, col)
+            const rawB = data.getCellRaw(b, col)
+            const va = rawA == null ? NaN : Number(rawA)
+            const vb = rawB == null ? NaN : Number(rawB)
+            const aOk = Number.isFinite(va) || va === Infinity || va === -Infinity
+            const bOk = Number.isFinite(vb) || vb === Infinity || vb === -Infinity
+            if (!aOk && !bOk) cmp = 0
+            else if (!aOk) return 1
+            else if (!bOk) return -1
+            else cmp = va - vb
+          } else if (colType === 'boolean') {
+            const rawA = data.getCellRaw(a, col)
+            const rawB = data.getCellRaw(b, col)
+            if (rawA == null && rawB == null) cmp = 0
+            else if (rawA == null) return 1
+            else if (rawB == null) return -1
+            else cmp = (rawA ? 1 : 0) - (rawB ? 1 : 0)
+          } else {
+            const rawA = data.getCellRaw(a, col)
+            const rawB = data.getCellRaw(b, col)
+            if (rawA == null && rawB == null) cmp = 0
+            else if (rawA == null) return 1
+            else if (rawB == null) return -1
+            else {
+              const sa = data.getCell(a, col)
+              const sb = data.getCell(b, col)
+              cmp = sa < sb ? -1 : sa > sb ? 1 : 0
+            }
+          }
+          return dir === 'asc' ? cmp : -cmp
+        })
+      }
     }
 
     // Step 3: write to viewIndices
