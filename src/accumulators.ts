@@ -140,9 +140,16 @@ export class NumericAccumulator implements SummaryAccumulator {
     }
   }
 
-  snapshot(): ColumnSummary {
-    if (this.monotonic && this.nanCount === 0 && this.infCount === 0 && this.negInfCount === 0 && this.nullCount === 0) return null
+  snapshot(totalRows?: number): ColumnSummary {
     if (this.finiteValues.length === 0) return null
+
+    // Detect index/ID columns: monotonic with range > 0 and high uniqueness, or just high uniqueness
+    const uniqueCount = this.uniqueValues?.size
+    const isMonotonicClean = this.monotonic && this.min < this.max &&
+      this.nanCount === 0 && this.infCount === 0 && this.negInfCount === 0 && this.nullCount === 0
+    const isHighUniqueness = uniqueCount !== undefined && totalRows !== undefined && uniqueCount >= totalRows * 0.9
+    const isIndex = (isMonotonicClean && isHighUniqueness) || (isMonotonicClean && uniqueCount === undefined)
+
     const binWidth = (this.max - this.min) / BIN_COUNT || 1
     const bins: NumericColumnSummary['bins'] = []
     for (let b = 0; b < BIN_COUNT; b++) {
@@ -159,7 +166,8 @@ export class NumericAccumulator implements SummaryAccumulator {
       min: this.min,
       max: this.max,
       bins,
-      uniqueCount: this.uniqueValues?.size,
+      uniqueCount,
+      isIndex,
     }
   }
 }

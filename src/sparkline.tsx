@@ -166,6 +166,17 @@ function NumericHistogram({ summary, width, visibleBins, activeFilter, onFilter 
   activeFilter?: RangeFilter | null
   onFilter: FilterCallback
 }) {
+  // Index/ID columns: just show the range, no histogram
+  if (summary.isIndex) {
+    return (
+      <div>
+        <span className="pt-th-range">
+          {formatNum(summary.min)} – {formatNum(summary.max)}
+        </span>
+      </div>
+    )
+  }
+
   // Low-cardinality: show as categorical bars instead of histogram
   if (summary.uniqueCount !== undefined && summary.uniqueCount < 10) {
     return <LowCardinalityNumericBars summary={summary} activeFilter={activeFilter} onFilter={onFilter} />
