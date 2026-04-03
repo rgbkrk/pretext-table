@@ -2,7 +2,6 @@ import { createRoot, type Root } from 'react-dom/client'
 import { createPortal } from 'react-dom'
 import { useRef, useCallback, useState, useMemo, useEffect } from 'react'
 import { BarChart } from 'semiotic/ordinal'
-import { AreaChart } from 'semiotic/xy'
 import type {
   NumericColumnSummary,
   CategoricalColumnSummary,
@@ -487,32 +486,33 @@ function TimestampHistogram({ summary, width, visibleBins, activeFilter, onFilte
 }) {
   const [minLabel, maxLabel] = formatDateRange(summary.min, summary.max)
 
-  // Area chart data: x = bin midpoint timestamp, y = count
-  const areaData = useMemo(() =>
-    summary.bins.map(bin => ({
-      x: (bin.x0 + bin.x1) / 2,
-      y: bin.count,
-    })),
-    [summary.bins],
-  )
   const hasOverlay = visibleBins && Math.max(...visibleBins) > 0
   const isFiltered = !!activeFilter
+
+  // SVG area path — simpler and matches our palette
+  const maxCount = Math.max(...summary.bins.map(b => b.count), 1)
+  const areaPath = useMemo(() => {
+    const bins = summary.bins
+    const n = bins.length
+    if (n === 0) return ''
+    const stepW = width / n
+    const h = CHART_HEIGHT
+    const pts = bins.map((b, i) => {
+      const x = i * stepW + stepW / 2
+      const y = h - (b.count / maxCount) * (h - 1)
+      return `${x},${y}`
+    })
+    return `M0,${h} L${pts.join(' L')} L${width},${h} Z`
+  }, [summary.bins, width, maxCount])
+
+  const fillColor = isFiltered ? 'rgba(149, 95, 59, 0.15)' : hasOverlay ? 'rgba(149, 95, 59, 0.25)' : 'rgba(149, 95, 59, 0.6)'
 
   return (
     <div>
       <div style={{ position: 'relative', width, height: CHART_HEIGHT }}>
-        <AreaChart
-          data={areaData}
-          xAccessor="x"
-          yAccessor="y"
-          width={width}
-          height={CHART_HEIGHT}
-          margin={{ top: 1, right: 0, bottom: 0, left: 0 }}
-          color={isFiltered ? 'rgba(149, 95, 59, 0.15)' : hasOverlay ? 'rgba(149, 95, 59, 0.2)' : 'rgba(149, 95, 59, 0.5)'}
-          enableHover={false}
-          showGrid={false}
-          accessibleTable={false}
-        />
+        <svg width={width} height={CHART_HEIGHT} viewBox={`0 0 ${width} ${CHART_HEIGHT}`}>
+          <path d={areaPath} fill={fillColor} stroke="rgba(149, 95, 59, 0.7)" strokeWidth={1.5} />
+        </svg>
         {hasOverlay && <VisibleOverlay bins={summary.bins} visibleBins={visibleBins} width={width} />}
         <BrushLayer width={width} min={summary.min} max={summary.max} activeFilter={activeFilter} onFilter={onFilter} />
       </div>
