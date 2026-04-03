@@ -154,6 +154,9 @@ export function createWasmTableData(handle: number): WasmTableHandle {
       columns[colIndex].columnType = targetType
       columns[colIndex].numeric = targetType === 'numeric'
     },
+    sortColumn(colIndex: number, ascending: boolean): Uint32Array {
+      return mod.store_sort_indices(handle, colIndex, ascending)
+    },
   }
 
   return { handle, tableData, columns, prefetchViewport }
