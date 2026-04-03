@@ -77,7 +77,9 @@ export function fitColumnWidths(
     if (summary && (summary as any).isIndex === true) {
       const maxVal = (summary as any).max as number
       const formatted = maxVal != null ? Math.round(maxVal).toLocaleString() : ''
-      colWidths[c] = Math.ceil(measureCellText(formatted)) + CELL_PAD
+      const indexW = Math.ceil(measureCellText(formatted)) + CELL_PAD
+      // Only widen — main.ts may have set a larger width from totalRows
+      if (indexW > colWidths[c]) colWidths[c] = indexW
       continue
     }
 
