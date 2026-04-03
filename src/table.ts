@@ -90,6 +90,8 @@ export type TableData = {
   sortColumn?: (colIndex: number, ascending: boolean) => Uint32Array
   /** Optional: recompute filtered summaries in WASM (crossfilter fast path). */
   recomputeFilteredSummaries?: (mask: Uint8Array, filteredCount: number) => void
+  /** Optional: apply filters in WASM and return matching row indices. */
+  filterRows?: (filters: (ColumnFilter | null)[]) => Uint32Array
 }
 
 // --- Filter types ---
@@ -303,8 +305,14 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     // Step 1: filter
     const filtered: number[] = []
     if (hasActiveFilters()) {
-      for (let i = 0; i < rowCount; i++) {
-        if (rowPassesFilters(i)) filtered.push(i)
+      if (data.filterRows) {
+        // WASM fast path: apply all filters in Rust, no per-cell FFI
+        const wasmResult = data.filterRows(filters)
+        for (let i = 0; i < wasmResult.length; i++) filtered.push(wasmResult[i])
+      } else {
+        for (let i = 0; i < rowCount; i++) {
+          if (rowPassesFilters(i)) filtered.push(i)
+        }
       }
     } else {
       for (let i = 0; i < rowCount; i++) filtered.push(i)

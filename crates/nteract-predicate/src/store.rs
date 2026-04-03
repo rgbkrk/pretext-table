@@ -7,9 +7,10 @@ use arrow::ipc::reader::StreamReader;
 use arrow::ipc::writer::StreamWriter;
 use arrow::record_batch::RecordBatch;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
 use std::sync::Mutex;
+use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
 /// A loaded dataset stored in WASM memory.
@@ -954,4 +955,164 @@ pub fn cast_column(handle: u32, col: usize, target_type: &str) -> Result<(), JsV
 
         Ok(())
     })
+}
+
+// --- Store-based filter rows ---
+
+#[derive(Deserialize)]
+#[serde(tag = "kind")]
+enum FilterSpec {
+    #[serde(rename = "range")]
+    Range { col: usize, min: f64, max: f64 },
+    #[serde(rename = "set")]
+    Set { col: usize, values: Vec<String> },
+    #[serde(rename = "boolean")]
+    Boolean { col: usize, value: bool },
+}
+
+/// Apply filter predicates to the store and return matching row indices.
+/// `filters_js` is a JSON array of filter specs:
+///   [{kind: "range", col: 0, min: 10, max: 50},
+///    {kind: "set", col: 1, values: ["a", "b"]},
+///    {kind: "boolean", col: 3, value: true}]
+/// Returns a Vec<u32> of row indices that pass ALL filters (AND logic).
+#[wasm_bindgen]
+pub fn store_filter_rows(handle: u32, filters_js: JsValue) -> Result<Vec<u32>, JsValue> {
+    let filters: Vec<FilterSpec> = serde_wasm_bindgen::from_value(filters_js)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse filters: {}", e)))?;
+
+    if filters.is_empty() {
+        // No filters — return all row indices
+        return with_store(handle, |s| {
+            (0..s.total_rows as u32).collect()
+        }).map_err(|e| JsValue::from_str(&e));
+    }
+
+    // Pre-build HashSets for set filters
+    let set_lookups: Vec<Option<HashSet<&str>>> = filters.iter().map(|f| {
+        match f {
+            FilterSpec::Set { values, .. } => Some(values.iter().map(|s| s.as_str()).collect()),
+            _ => None,
+        }
+    }).collect();
+
+    with_store(handle, |s| {
+        // Concatenate each filtered column once (avoids per-row batch resolution)
+        let mut concat_cols: Vec<Option<arrow::array::ArrayRef>> = vec![None; s.num_cols];
+        for filter in &filters {
+            let col_idx = match filter {
+                FilterSpec::Range { col, .. } => *col,
+                FilterSpec::Set { col, .. } => *col,
+                FilterSpec::Boolean { col, .. } => *col,
+            };
+            if concat_cols[col_idx].is_none() {
+                let arrays: Vec<&dyn Array> = s.batches.iter()
+                    .map(|b| b.column(col_idx).as_ref())
+                    .collect();
+                if !arrays.is_empty() {
+                    if let Ok(combined) = concat(&arrays) {
+                        concat_cols[col_idx] = Some(combined);
+                    }
+                }
+            }
+        }
+
+        let total = s.total_rows;
+        let mut result = Vec::with_capacity(total);
+
+        'row: for row in 0..total {
+            for (fi, filter) in filters.iter().enumerate() {
+                match filter {
+                    FilterSpec::Range { col, min, max } => {
+                        if let Some(ref arr) = concat_cols[*col] {
+                            if arr.is_null(row) { continue 'row; }
+                            let v = get_f64_value(arr.as_ref(), row);
+                            if v.is_nan() || v < *min || v > *max {
+                                continue 'row;
+                            }
+                        }
+                    }
+                    FilterSpec::Set { col, .. } => {
+                        if let Some(ref arr) = concat_cols[*col] {
+                            let s = get_string_value(arr.as_ref(), row);
+                            if let Some(ref lookup) = set_lookups[fi] {
+                                if !lookup.contains(s.as_str()) {
+                                    continue 'row;
+                                }
+                            }
+                        }
+                    }
+                    FilterSpec::Boolean { col, value } => {
+                        if let Some(ref arr) = concat_cols[*col] {
+                            if arr.is_null(row) { continue 'row; }
+                            if let Some(bool_arr) = arr.as_any().downcast_ref::<BooleanArray>() {
+                                if bool_arr.value(row) != *value {
+                                    continue 'row;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            result.push(row as u32);
+        }
+        result
+    }).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Extract an f64 from any numeric or timestamp array at the given row.
+fn get_f64_value(arr: &dyn Array, row: usize) -> f64 {
+    match arr.data_type() {
+        DataType::Float64 => arr.as_any().downcast_ref::<Float64Array>().map(|a| a.value(row)).unwrap_or(f64::NAN),
+        DataType::Float32 => arr.as_any().downcast_ref::<arrow::array::Float32Array>().map(|a| a.value(row) as f64).unwrap_or(f64::NAN),
+        DataType::Int32 => arr.as_any().downcast_ref::<Int32Array>().map(|a| a.value(row) as f64).unwrap_or(f64::NAN),
+        DataType::Int64 => arr.as_any().downcast_ref::<Int64Array>().map(|a| a.value(row) as f64).unwrap_or(f64::NAN),
+        DataType::UInt32 => arr.as_any().downcast_ref::<UInt32Array>().map(|a| a.value(row) as f64).unwrap_or(f64::NAN),
+        DataType::UInt64 => arr.as_any().downcast_ref::<UInt64Array>().map(|a| a.value(row) as f64).unwrap_or(f64::NAN),
+        DataType::Int16 => arr.as_any().downcast_ref::<arrow::array::Int16Array>().map(|a| a.value(row) as f64).unwrap_or(f64::NAN),
+        DataType::Int8 => arr.as_any().downcast_ref::<arrow::array::Int8Array>().map(|a| a.value(row) as f64).unwrap_or(f64::NAN),
+        DataType::UInt16 => arr.as_any().downcast_ref::<arrow::array::UInt16Array>().map(|a| a.value(row) as f64).unwrap_or(f64::NAN),
+        DataType::UInt8 => arr.as_any().downcast_ref::<arrow::array::UInt8Array>().map(|a| a.value(row) as f64).unwrap_or(f64::NAN),
+        DataType::Timestamp(TimeUnit::Millisecond, _) => arr.as_any().downcast_ref::<arrow::array::TimestampMillisecondArray>().map(|a| a.value(row) as f64).unwrap_or(f64::NAN),
+        DataType::Timestamp(TimeUnit::Microsecond, _) => arr.as_any().downcast_ref::<arrow::array::TimestampMicrosecondArray>().map(|a| a.value(row) as f64 / 1000.0).unwrap_or(f64::NAN),
+        DataType::Timestamp(TimeUnit::Nanosecond, _) => arr.as_any().downcast_ref::<arrow::array::TimestampNanosecondArray>().map(|a| a.value(row) as f64 / 1_000_000.0).unwrap_or(f64::NAN),
+        DataType::Timestamp(TimeUnit::Second, _) => arr.as_any().downcast_ref::<arrow::array::TimestampSecondArray>().map(|a| a.value(row) as f64 * 1000.0).unwrap_or(f64::NAN),
+        DataType::Date32 => arr.as_any().downcast_ref::<arrow::array::Date32Array>().map(|a| a.value(row) as f64 * 86_400_000.0).unwrap_or(f64::NAN),
+        DataType::Date64 => arr.as_any().downcast_ref::<arrow::array::Date64Array>().map(|a| a.value(row) as f64).unwrap_or(f64::NAN),
+        _ => f64::NAN,
+    }
+}
+
+/// Extract a string value from any string or dictionary-encoded column.
+fn get_string_value(arr: &dyn Array, row: usize) -> String {
+    if arr.is_null(row) { return String::new(); }
+    match arr.data_type() {
+        DataType::Utf8 | DataType::LargeUtf8 => {
+            arr.as_any().downcast_ref::<StringArray>()
+                .map(|a| a.value(row).to_string())
+                .unwrap_or_default()
+        }
+        DataType::Dictionary(_, _) => {
+            let dict_arr = arr.as_any_dictionary();
+            let keys = dict_arr.keys();
+            let values = dict_arr.values();
+            if let Some(str_values) = values.as_any().downcast_ref::<StringArray>() {
+                if let Some(int_keys) = keys.as_any().downcast_ref::<Int32Array>() {
+                    if !int_keys.is_null(row) {
+                        let key = int_keys.value(row) as usize;
+                        if key < str_values.len() {
+                            return str_values.value(key).to_string();
+                        }
+                    }
+                }
+            }
+            String::new()
+        }
+        DataType::Boolean => {
+            arr.as_any().downcast_ref::<BooleanArray>()
+                .map(|a| if a.value(row) { "Yes".to_string() } else { "No".to_string() })
+                .unwrap_or_default()
+        }
+        _ => format!("{:?}", arr.as_any()),
+    }
 }

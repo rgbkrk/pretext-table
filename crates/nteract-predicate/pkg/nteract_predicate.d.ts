@@ -125,6 +125,16 @@ export function parquet_schema_metadata(parquet_bytes: Uint8Array): any;
 export function store_bool_counts(handle: number, col: number): Uint32Array;
 
 /**
+ * Apply filter predicates to the store and return matching row indices.
+ * `filters_js` is a JSON array of filter specs:
+ *   [{kind: "range", col: 0, min: 10, max: 50},
+ *    {kind: "set", col: 1, values: ["a", "b"]},
+ *    {kind: "boolean", col: 3, value: true}]
+ * Returns a Vec<u32> of row indices that pass ALL filters (AND logic).
+ */
+export function store_filter_rows(handle: number, filters_js: any): Uint32Array;
+
+/**
  * Filtered bool counts: returns [true_count, false_count, null_count] for masked rows.
  */
 export function store_filtered_bool_counts(handle: number, col: number, mask: Uint8Array): Uint32Array;
@@ -203,6 +213,7 @@ export interface InitOutput {
     readonly parquet_metadata: (a: number, b: number, c: number) => void;
     readonly parquet_schema_metadata: (a: number, b: number, c: number) => void;
     readonly store_bool_counts: (a: number, b: number, c: number) => void;
+    readonly store_filter_rows: (a: number, b: number, c: number) => void;
     readonly store_filtered_bool_counts: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly store_filtered_histogram: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly store_filtered_value_counts: (a: number, b: number, c: number, d: number, e: number) => void;
@@ -225,8 +236,9 @@ export interface InitOutput {
     readonly rust_zstd_wasm_shim_qsort: (a: number, b: number, c: number, d: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
+    readonly __wbindgen_export3: (a: number) => void;
     readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
-    readonly __wbindgen_export3: (a: number, b: number, c: number) => void;
+    readonly __wbindgen_export4: (a: number, b: number, c: number) => void;
     readonly __wbindgen_start: () => void;
 }
 

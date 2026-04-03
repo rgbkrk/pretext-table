@@ -7,6 +7,7 @@
  */
 import { tableFromIPC } from 'apache-arrow'
 import { getModuleSync } from './predicate'
+import type { FilterSpecJson } from './predicate'
 import type { TableData, Column, ColumnType } from './table'
 import { formatCell } from './accumulators'
 import { autoWidth } from './auto-width'
@@ -215,6 +216,25 @@ export function createWasmTableData(handle: number): WasmTableHandle {
           }
         }
       }
+    },
+    filterRows(filters: (import('./table').ColumnFilter | null)[]): Uint32Array {
+      const specs: FilterSpecJson[] = []
+      for (let c = 0; c < filters.length; c++) {
+        const f = filters[c]
+        if (!f) continue
+        switch (f.kind) {
+          case 'range':
+            specs.push({ kind: 'range', col: c, min: f.min, max: f.max })
+            break
+          case 'set':
+            specs.push({ kind: 'set', col: c, values: Array.from(f.values) })
+            break
+          case 'boolean':
+            specs.push({ kind: 'boolean', col: c, value: f.value })
+            break
+        }
+      }
+      return mod.store_filter_rows(handle, specs)
     },
   }
 
