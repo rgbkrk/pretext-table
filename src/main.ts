@@ -260,8 +260,8 @@ async function loadHuggingFaceWasm(dataset: DatasetEntry, tableRoot: HTMLElement
     if (pandasIndexCols.has(col.key) || isIndexName(col.key)) {
       col.width = 70
       col.sortable = false
-      // Hide uninformative index labels — the numbers speak for themselves
-      if (isIndexName(col.key)) col.label = ''
+      // Hide labels for pandas artifacts — not real column names users would query
+      if (/^(unnamed[: _]?\d*|__index_level_\d+__)$/i.test(col.key)) col.label = ''
     }
     const hfFeature = hfFeatures[col.key]
     if (hfFeature?._type === 'ClassLabel' && col.columnType !== 'categorical') {
