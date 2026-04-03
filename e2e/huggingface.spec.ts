@@ -14,7 +14,7 @@ test.describe('HuggingFace Dataset Loading', () => {
     await page.goto('/?dataset=heart-failure')
     await page.waitForSelector('.pt-table-container', { timeout: 90_000 })
 
-    await expect(page.locator('.pt-stat-rows')).toContainText('299', { timeout: 30_000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /299/, { timeout: 30_000 })
     await expect(page.locator('.pt-badge').first()).toBeVisible({ timeout: 5_000 })
   })
 
@@ -23,7 +23,7 @@ test.describe('HuggingFace Dataset Loading', () => {
     await page.waitForSelector('.pt-table-container', { timeout: 90_000 })
 
     // Wait for all row groups to load (progressive loading shows partial counts first)
-    await expect(page.locator('.pt-stat-rows')).toContainText(/3[0-9],/, { timeout: 60_000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /3[0-9],/, { timeout: 60_000 })
 
     await expect(page.locator('.pt-cat-summary').first()).toBeVisible({ timeout: 5_000 })
   })

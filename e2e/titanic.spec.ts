@@ -12,13 +12,13 @@ test.describe('Titanic Edge Cases', () => {
     await page.goto('/?dataset=titanic')
     await page.waitForSelector('.pt-table-container', { timeout: 90_000 })
 
-    await expect(page.locator('.pt-stat-rows')).toContainText('891', { timeout: 30_000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /891/, { timeout: 30_000 })
   })
 
   test('shows null badges in Age column', async ({ page }) => {
     await page.goto('/?dataset=titanic')
     await page.waitForSelector('.pt-table-container', { timeout: 90_000 })
-    await expect(page.locator('.pt-stat-rows')).toContainText('891', { timeout: 30_000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /891/, { timeout: 30_000 })
 
     // Scroll down to find a null age (row 6 — Mr. James Moran)
     // Null badges should be visible somewhere in the visible rows
@@ -28,7 +28,7 @@ test.describe('Titanic Edge Cases', () => {
   test('has mixed column types', async ({ page }) => {
     await page.goto('/?dataset=titanic')
     await page.waitForSelector('.pt-table-container', { timeout: 90_000 })
-    await expect(page.locator('.pt-stat-rows')).toContainText('891', { timeout: 30_000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /891/, { timeout: 30_000 })
 
     // Should have both numeric histograms and categorical bars
     const histograms = page.locator('.pt-th-range')
@@ -41,7 +41,7 @@ test.describe('Titanic Edge Cases', () => {
   test('category bars show sex distribution', async ({ page }) => {
     await page.goto('/?dataset=titanic')
     await page.waitForSelector('.pt-table-container', { timeout: 90_000 })
-    await expect(page.locator('.pt-stat-rows')).toContainText('891', { timeout: 30_000 })
+    await expect(page.locator('.pt-stat-rows')).toHaveAttribute('data-value', /891/, { timeout: 30_000 })
 
     // Sex column should show male/female distribution
     const sexBars = page.locator('.pt-cat-row', { hasText: 'male' })
