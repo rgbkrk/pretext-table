@@ -742,12 +742,47 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     return s
   }
 
-  let prevRange = '', prevDom = '', prevFps = ''
+  let prevRange = '', prevDom = ''
 
   // RxJS FPS: frame counter on animationFrameScheduler, render cost from Subject
   const renderCost$ = new Subject<number>() // receives elapsed ms per render
+
+  // Flip-clock FPS display — per-digit slots with slide animation
+  statFrame.classList.add('pt-flip-clock')
+  let flipSlots: HTMLSpanElement[] = []
+  let prevDigits = ''
+
+  function updateFlipClock(text: string) {
+    // Ensure we have the right number of digit spans
+    while (flipSlots.length < text.length) {
+      const span = document.createElement('span')
+      span.className = 'pt-flip-digit'
+      statFrame.appendChild(span)
+      flipSlots.push(span)
+    }
+    while (flipSlots.length > text.length) {
+      statFrame.removeChild(flipSlots.pop()!)
+    }
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i]
+      const prev = prevDigits[i]
+      const span = flipSlots[i]
+
+      if (ch !== prev) {
+        span.textContent = ch
+        // Only animate digit characters
+        if (ch >= '0' && ch <= '9') {
+          span.classList.remove('pt-flip-pop')
+          void span.offsetWidth // force reflow to restart animation
+          span.classList.add('pt-flip-pop')
+        }
+      }
+    }
+    prevDigits = text
+  }
+
   const fps$ = interval(0, animationFrameScheduler).pipe(
-    // Each emission = one display frame. Pair with timestamps for FPS.
     scan<number, { prevTime: number; deltas: number[] }>((state, _) => {
       const now = performance.now()
       if (state.prevTime > 0) {
@@ -758,16 +793,18 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
       return { prevTime: now, deltas: [] }
     }, { prevTime: 0, deltas: [] }),
     map(({ deltas }) => {
-      if (deltas.length === 0) return '– fps'
+      if (deltas.length === 0) return '–'
       const avg = deltas.reduce((a, b) => a + b, 0) / deltas.length
-      return `${Math.round(1000 / avg)} fps`
+      const raw = 1000 / avg
+      // Stabilize: round to nearest 5 above 60fps to avoid jitter
+      const fps = raw >= 60 ? Math.round(raw / 5) * 5 : Math.round(raw)
+      return String(fps)
     }),
   )
   const fpsSub = fps$.pipe(
     withLatestFrom(renderCost$),
   ).subscribe(([fpsStr, cost]) => {
-    const str = `${fpsStr}·${cost.toFixed(1)}ms`
-    prevFps = updateStat(statFrame, str, prevFps)
+    updateFlipClock(`${fpsStr}fps·${cost.toFixed(1)}ms`)
   })
 
   function updateStat(el: HTMLSpanElement, value: string, prev: string): string {
