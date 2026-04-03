@@ -44,6 +44,7 @@ export function autoWidth(name: string, colType: ColumnType): number {
  * Refine column widths by sampling actual cell data.
  * Uses the median single-line width — avoids outlier-driven expansion.
  * Only widens columns, never shrinks below the header-based width.
+ * Narrows index columns to save space.
  */
 export function fitColumnWidths(
   data: TableData,
@@ -54,6 +55,13 @@ export function fitColumnWidths(
   if (sampleSize === 0) return
 
   for (let c = 0; c < data.columns.length; c++) {
+    // Narrow index columns — they just show a range, don't need much space
+    const summary = data.columnSummaries[c]
+    if (summary && 'isIndex' in summary && (summary as any).isIndex) {
+      colWidths[c] = 70
+      continue
+    }
+
     const widths: number[] = []
     for (let r = 0; r < sampleSize; r++) {
       const text = data.getCell(r, c)

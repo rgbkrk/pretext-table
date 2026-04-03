@@ -254,11 +254,12 @@ async function loadHuggingFaceWasm(dataset: DatasetEntry, tableRoot: HTMLElement
   tableData.prefetchViewport = prefetchViewport
   tableData.recomputeSummaries = () => updateWasmSummaries(mod, handle, tableData, columns, pandasIndexCols)
 
-  // Apply metadata: mark pandas index columns, log HF features
+  // Apply metadata: mark pandas index columns, narrow index columns
+  const isIndexName = (name: string) => /^(unnamed[: _]?\d*|index|_?id|rowid|row_?id|row_?num)$/i.test(name)
   for (const col of columns) {
-    if (pandasIndexCols.has(col.key)) {
-      // Mark as index — will suppress histogram in summary
-      col.sortable = false // Index columns shouldn't be sortable by users
+    if (pandasIndexCols.has(col.key) || isIndexName(col.key)) {
+      col.width = 70 // Narrow — index columns just show the range
+      col.sortable = false
     }
     const hfFeature = hfFeatures[col.key]
     if (hfFeature?._type === 'ClassLabel' && col.columnType !== 'categorical') {
