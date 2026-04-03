@@ -74,7 +74,7 @@ export function fitColumnWidths(
   for (let c = 0; c < data.columns.length; c++) {
     // Size index columns to fit their max value — they just show numbers
     const summary = data.columnSummaries[c]
-    if (summary && 'isIndex' in summary && (summary as any).isIndex) {
+    if (summary && (summary as any).isIndex === true) {
       const maxVal = (summary as any).max as number
       const formatted = maxVal != null ? Math.round(maxVal).toLocaleString() : ''
       colWidths[c] = Math.ceil(measureCellText(formatted)) + CELL_PAD

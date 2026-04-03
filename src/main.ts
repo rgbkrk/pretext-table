@@ -353,12 +353,12 @@ function updateWasmSummaries(
           if (nonZeroBins <= 10) {
             summary.uniqueCount = nonZeroBins
           }
-          // Detect index/ID columns: pandas metadata, uniform distribution, or name pattern
+          // Detect index/ID columns: pandas metadata or name pattern.
+          // Uniform distribution alone is not enough — many real data columns
+          // (danceability, energy, etc.) are uniformly distributed too.
           const isPandasIndex = pandasIndexCols?.has(col.key) ?? false
-          const isUniform = nonZeroBins === bins.length &&
-            bins.every(b => b.count > 0 && b.count < numRows / (BIN_COUNT * 0.3))
           const isIndexName = /^(unnamed[: _]*\d*|index|_?id|rowid|row_?id|row_?num)$/i.test(col.key)
-          if (isPandasIndex || isUniform || isIndexName) {
+          if (isPandasIndex || isIndexName) {
             ;(summary as any).isIndex = true
           }
         }

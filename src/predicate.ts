@@ -40,11 +40,11 @@ let mod: PredicateModule | null = null
 
 async function ensureModule(): Promise<PredicateModule> {
   if (mod) return mod
-  // Dynamic import — Vite copies public/ to dist/ so this resolves in both dev and prod.
-  // The pkg is built separately: cd crates/nteract-predicate && wasm-pack build --target web
-  // Then copy to public/wasm/: cp crates/nteract-predicate/pkg/{nteract_predicate.js,nteract_predicate_bg.wasm} public/wasm/
-  const base = import.meta.env?.BASE_URL ?? '/'
-  const path = `${base}wasm/nteract_predicate.js`
+  // Dev: import from crate source (Vite resolves it).
+  // Prod: import from public/wasm/ (copied by vite plugin at build time).
+  const path = import.meta.env.DEV
+    ? '../crates/nteract-predicate/pkg/nteract_predicate.js'
+    : `${import.meta.env.BASE_URL}wasm/nteract_predicate.js`
   const wasm = await import(/* @vite-ignore */ path)
   await wasm.default()
   mod = wasm as unknown as PredicateModule
