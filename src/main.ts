@@ -258,8 +258,10 @@ async function loadHuggingFaceWasm(dataset: DatasetEntry, tableRoot: HTMLElement
   const isIndexName = (name: string) => /^(unnamed[: _]?\d*|index|_?id|rowid|row_?id|row_?num)$/i.test(name)
   for (const col of columns) {
     if (pandasIndexCols.has(col.key) || isIndexName(col.key)) {
-      col.width = 70 // Narrow — index columns just show the range
+      col.width = 70
       col.sortable = false
+      // Hide uninformative index labels — the numbers speak for themselves
+      if (isIndexName(col.key)) col.label = ''
     }
     const hfFeature = hfFeatures[col.key]
     if (hfFeature?._type === 'ClassLabel' && col.columnType !== 'categorical') {
