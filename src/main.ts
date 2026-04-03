@@ -47,7 +47,7 @@ let currentDatasetId = 'generated'
 
 function getInitialDataset(): string {
   const params = new URLSearchParams(window.location.search)
-  return params.get('dataset') ?? 'generated'
+  return params.get('dataset') ?? 'spotify'
 }
 
 async function boot() {
