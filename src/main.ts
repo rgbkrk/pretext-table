@@ -207,7 +207,10 @@ async function loadHuggingFaceWasm(dataset: DatasetEntry, tableRoot: HTMLElement
   const url = await resolveHuggingFaceParquetUrl(dataset.path, dataset.config)
 
   renderLoadingSkeleton(tableRoot, 'Downloading Parquet…')
-  const [resp] = await Promise.all([fetch(url), wasmInitPromise])
+  const [resp, wasmOk] = await Promise.all([fetch(url), wasmInitPromise])
+  if (!wasmOk) {
+    throw new Error('Failed to load nteract-predicate WASM module')
+  }
   if (!resp.ok) {
     throw new Error(`Failed to fetch Parquet: ${resp.status} ${resp.statusText}`)
   }
@@ -219,6 +222,7 @@ async function loadHuggingFaceWasm(dataset: DatasetEntry, tableRoot: HTMLElement
   // Get metadata to know how many row groups
   const meta = mod.parquet_metadata(parquetBytes)
   const numRowGroups = meta[0]
+  const totalRows = meta[1]
 
   // Read schema metadata for pandas index_columns and HuggingFace feature types
   let schemaMetadata: Record<string, string> = {}
@@ -254,11 +258,16 @@ async function loadHuggingFaceWasm(dataset: DatasetEntry, tableRoot: HTMLElement
   tableData.prefetchViewport = prefetchViewport
   tableData.recomputeSummaries = () => updateWasmSummaries(mod, handle, tableData, columns, pandasIndexCols)
 
-  // Apply metadata: mark pandas index columns, log HF features
+  // Apply metadata: mark pandas index columns, narrow index columns
+  const isIndexName = (name: string) => /^(unnamed[: _]*\d*|index|_?id|rowid|row_?id|row_?num)$/i.test(name)
   for (const col of columns) {
-    if (pandasIndexCols.has(col.key)) {
-      // Mark as index — will suppress histogram in summary
-      col.sortable = false // Index columns shouldn't be sortable by users
+    if (pandasIndexCols.has(col.key) || isIndexName(col.key)) {
+      // Size to fit the max row number — estimate from digit count
+      const digits = totalRows.toLocaleString().length
+      col.width = Math.max(60, digits * 9 + 24) // ~9px per char + cell padding
+      col.sortable = false
+      // Hide labels for pandas artifacts — not real column names users would query
+      if (/^(unnamed[: _]*\d*|__index_level_\d+__)$/i.test(col.key)) col.label = ''
     }
     const hfFeature = hfFeatures[col.key]
     if (hfFeature?._type === 'ClassLabel' && col.columnType !== 'categorical') {
@@ -344,12 +353,12 @@ function updateWasmSummaries(
           if (nonZeroBins <= 10) {
             summary.uniqueCount = nonZeroBins
           }
-          // Detect index/ID columns: pandas metadata, uniform distribution, or name pattern
+          // Detect index/ID columns: pandas metadata or name pattern.
+          // Uniform distribution alone is not enough — many real data columns
+          // (danceability, energy, etc.) are uniformly distributed too.
           const isPandasIndex = pandasIndexCols?.has(col.key) ?? false
-          const isUniform = nonZeroBins === bins.length &&
-            bins.every(b => b.count > 0 && b.count < numRows / (BIN_COUNT * 0.3))
-          const isIndexName = /^(unnamed[: _]?\d*|index|_?id|rowid|row_?id|row_?num)$/i.test(col.key)
-          if (isPandasIndex || isUniform || isIndexName) {
+          const isIndexName = /^(unnamed[: _]*\d*|index|_?id|rowid|row_?id|row_?num)$/i.test(col.key)
+          if (isPandasIndex || isIndexName) {
             ;(summary as any).isIndex = true
           }
         }
