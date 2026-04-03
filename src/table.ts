@@ -199,8 +199,48 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
   // Cells are prepared lazily when they enter the viewport.
   // computeRowHeight() handles null caches with an estimated height.
 
-  // Column widths (mutable copy)
+  // Column widths — auto-fit from sampled data when available
   const colWidths = columns.map(c => c.width)
+
+  // Auto-fit: sample first N rows and compute widths that fit content on ~1 line
+  {
+    const SAMPLE_SIZE = Math.min(50, rowCount)
+    const MAX_COL_WIDTH = 350
+    const MIN_COL_WIDTH = 60
+
+    if (SAMPLE_SIZE > 0) {
+      for (let c = 0; c < columns.length; c++) {
+        const widths: number[] = []
+        for (let r = 0; r < SAMPLE_SIZE; r++) {
+          const text = data.getCell(r, c)
+          if (!text) continue
+          const prepared = prepare(text, FONT)
+          // Layout with very wide maxWidth to get single-line width
+          const { height } = layout(prepared, 9999, LINE_HEIGHT)
+          // If it fits on one line, use the text width; otherwise estimate
+          if (height <= LINE_HEIGHT) {
+            // Single line — measure actual width via canvas
+            const ctx = document.createElement('canvas').getContext('2d')
+            if (ctx) {
+              ctx.font = FONT
+              widths.push(ctx.measureText(text).width)
+            }
+          } else {
+            // Multi-line text — use a moderate width
+            widths.push(200)
+          }
+        }
+
+        if (widths.length > 0) {
+          // Use 75th percentile to avoid outlier-driven widths
+          widths.sort((a, b) => a - b)
+          const p75 = widths[Math.floor(widths.length * 0.75)]
+          const fitted = Math.ceil(p75) + CELL_PAD_H
+          colWidths[c] = Math.max(MIN_COL_WIDTH, Math.min(MAX_COL_WIDTH, fitted))
+        }
+      }
+    }
+  }
 
   // --- Compute heights ---
 
