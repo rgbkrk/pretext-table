@@ -710,24 +710,35 @@ h1 {
   100% { color: var(--muted); }
 }
 
-/* --- Flip-clock FPS counter --- */
+/* --- Odometer FPS counter --- */
 
-.pt-flip-clock {
-  display: inline;
+.pt-odometer {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
-.pt-flip-digit {
+.pt-odo-slot {
   display: inline-block;
+  height: 1.2em;
+  overflow: hidden;
+  vertical-align: baseline;
+  line-height: 1.2;
+  contain: layout style paint;
 }
 
-.pt-flip-pop {
-  animation: flip-pop 250ms cubic-bezier(0.4, 0, 0.2, 1);
+.pt-odo-strip {
+  display: flex;
+  flex-direction: column;
+  transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@keyframes flip-pop {
-  0% { transform: translateY(40%); opacity: 0.3; }
-  60% { transform: translateY(-5%); opacity: 1; }
-  100% { transform: translateY(0); opacity: 1; }
+.pt-odo-num {
+  display: block;
+  height: 1.2em;
+  line-height: 1.2;
 }
 
 /* --- Status indicator --- */
