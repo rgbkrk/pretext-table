@@ -97,7 +97,7 @@ export function ColumnContextMenu({ state, onAction, onClose }: Props) {
 
       {isStreaming ? (
         <div className="px-2 py-1.5 text-xs text-[var(--muted)] italic">
-          Type casting available after loading
+          Some operations hidden while loading
         </div>
       ) : (
         <>
