@@ -14,7 +14,7 @@ const CELL_PAD = 24      // 12px each side
 let measureCanvas: CanvasRenderingContext2D | null = null
 
 /** Measure the rendered width of text using canvas */
-function measureText(text: string, font: string): number {
+export function measureText(text: string, font: string): number {
   if (!measureCanvas) {
     if (typeof document === 'undefined') return text.length * 7
     measureCanvas = document.createElement('canvas').getContext('2d')
@@ -55,10 +55,12 @@ export function fitColumnWidths(
   if (sampleSize === 0) return
 
   for (let c = 0; c < data.columns.length; c++) {
-    // Narrow index columns — they just show a range, don't need much space
+    // Size index columns to fit their max value — they just show numbers
     const summary = data.columnSummaries[c]
     if (summary && 'isIndex' in summary && (summary as any).isIndex) {
-      colWidths[c] = 70
+      const maxVal = (summary as any).max as number
+      const formatted = maxVal != null ? Math.round(maxVal).toLocaleString() : ''
+      colWidths[c] = Math.ceil(measureText(formatted, CELL_FONT)) + CELL_PAD
       continue
     }
 
