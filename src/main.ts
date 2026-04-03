@@ -128,9 +128,10 @@ async function loadDataset(datasetId: string) {
   const dataset = DATASETS.find(d => d.id === datasetId)
   if (!dataset) return
 
-  // Update description
+  // Update description and page title
   const descEl = document.getElementById('dataset-description')
   if (descEl) descEl.textContent = dataset.description
+  document.title = `Sift — ${dataset.label}`
 
   // Clean up previous table
   if (currentEngine) {
