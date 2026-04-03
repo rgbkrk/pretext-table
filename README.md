@@ -1,6 +1,6 @@
 # Sift
 
-Crossfilter data explorer. [Pretext](https://github.com/chenglou/pretext) × [Arrow](https://arrow.apache.org/) × WASM.
+Crossfilter data explorer. [Pretext](https://github.com/chenglou/pretext) × [Arrow](https://arrow.apache.org/) × [Semiotic](https://semiotic.nteract.io/).
 
 ![Sift — Spotify 114k tracks](https://img.runt.run/2026/04/03/870bad2e6deb.png)
 
