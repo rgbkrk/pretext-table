@@ -12,19 +12,6 @@ const CELL_FONT = '14px Inter, "Helvetica Neue", Helvetica, Arial, sans-serif'
 const HEADER_CHROME = 60 // cell padding + type icon + sort arrow
 const CELL_PAD = 24      // 12px each side — matches CELL_PAD_H in table.ts
 
-let measureCanvas: CanvasRenderingContext2D | null = null
-
-/** Measure the rendered width of text using canvas (used for header labels) */
-export function measureText(text: string, font: string): number {
-  if (!measureCanvas) {
-    if (typeof document === 'undefined') return text.length * 7
-    measureCanvas = document.createElement('canvas').getContext('2d')
-  }
-  if (!measureCanvas) return text.length * 7
-  measureCanvas.font = font
-  return measureCanvas.measureText(text).width
-}
-
 /**
  * Measure the single-line width of header label text using pretext.
  * Uses the same measurement engine as cell text for consistency.
