@@ -133,7 +133,12 @@ export function SiftTable({
       engineRef.current = null
     }
 
-    engineRef.current = createTable(containerRef.current, data, {
+    // Create a dedicated div for the engine so it doesn't conflict with React's DOM
+    const engineDiv = document.createElement('div')
+    engineDiv.style.height = '100%'
+    containerRef.current.appendChild(engineDiv)
+
+    engineRef.current = createTable(engineDiv, data, {
       onChange: stableOnChange,
     })
     setStatus('ready')
@@ -141,6 +146,7 @@ export function SiftTable({
     return () => {
       engineRef.current?.destroy()
       engineRef.current = null
+      engineDiv.remove()
     }
   }, [data, stableOnChange])
 
@@ -203,8 +209,12 @@ export function SiftTable({
           engineRef.current = null
         }
 
-        container.innerHTML = ''
-        engineRef.current = createTable(container, tableData, {
+        // Create a dedicated div for the engine — don't touch React-managed children
+        const engineDiv = document.createElement('div')
+        engineDiv.style.height = '100%'
+        container.appendChild(engineDiv)
+
+        engineRef.current = createTable(engineDiv, tableData, {
           onChange: stableOnChange,
         })
         setStatus('ready')
@@ -239,9 +249,6 @@ export function SiftTable({
       className={className}
       style={{ height: '100%', ...style }}
     >
-      {status === 'loading' && (
-        <div className="pt-loading">Loading data…</div>
-      )}
       {status === 'error' && error && (
         <div className="pt-loading">Error: {error}</div>
       )}
