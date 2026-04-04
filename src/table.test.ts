@@ -239,4 +239,81 @@ describe('createTable', () => {
       expect(stats?.dataset.value).toContain('60')
     })
   })
+
+  describe('edge cases', () => {
+    it('single-row dataset mounts without crashing', async () => {
+      const singleContainer = document.createElement('div')
+      document.body.appendChild(singleContainer)
+      const singleData = makeTableData([[1, 'Solo', 42, true]])
+      const singleEngine = createTable(singleContainer, singleData)
+      await flushRAF()
+      // Engine mounts: header + stats bar + viewport exist
+      expect(singleContainer.querySelector('.pt-header')).not.toBeNull()
+      expect(singleContainer.querySelector('.pt-viewport')).not.toBeNull()
+      const stats = singleContainer.querySelector('.pt-stat-rows') as HTMLElement
+      expect(stats?.dataset.value).toContain('1')
+      singleEngine.destroy()
+    })
+
+    it('filter to zero results shows empty state', async () => {
+      await flushRAF()
+      engine.setFilter(2, { kind: 'range', min: 999, max: 1000 })
+      await flushRAF()
+      const stats = container.querySelector('.pt-stat-rows') as HTMLElement
+      expect(stats?.dataset.value).toContain('0 of')
+    })
+
+    it('filter with single-value range (min === max)', async () => {
+      await flushRAF()
+      const targetScore = rows[0][2] as number
+      engine.setFilter(2, { kind: 'range', min: targetScore, max: targetScore })
+      await flushRAF()
+      const pills = container.querySelectorAll('.pt-filter-pill')
+      expect(pills.length).toBe(1)
+      // Single-value pill should NOT show range dash
+      expect(pills[0].textContent).not.toContain('–')
+    })
+
+    it('set filter with empty set filters to zero', async () => {
+      await flushRAF()
+      engine.setFilter(1, { kind: 'set', values: new Set() })
+      await flushRAF()
+      const stats = container.querySelector('.pt-stat-rows') as HTMLElement
+      expect(stats?.dataset.value).toContain('0 of')
+    })
+
+    it('null/NaN/Infinity values in data do not crash engine', async () => {
+      const nullContainer = document.createElement('div')
+      document.body.appendChild(nullContainer)
+      const nullRows: unknown[][] = [
+        [1, 'Alice', null, true],
+        [2, null, 50, false],
+        [null, 'Bob', NaN, null],
+        [4, 'Carol', Infinity, true],
+        [5, 'Dave', -Infinity, false],
+      ]
+      const nullData = makeTableData(nullRows)
+      const nullEngine = createTable(nullContainer, nullData)
+      await flushRAF()
+      // Engine mounts without throwing
+      expect(nullContainer.querySelector('.pt-header')).not.toBeNull()
+      expect(nullContainer.querySelector('.pt-viewport')).not.toBeNull()
+      nullEngine.destroy()
+    })
+
+    it('clearAllFilters restores full count after multiple filters', async () => {
+      await flushRAF()
+      engine.setFilter(1, { kind: 'set', values: new Set(['Person 0']) })
+      engine.setFilter(2, { kind: 'range', min: 0, max: 50 })
+      engine.setFilter(3, { kind: 'boolean', value: true })
+      await flushRAF()
+      const stats = container.querySelector('.pt-stat-rows') as HTMLElement
+      expect(stats?.dataset.value).toContain('of')
+
+      engine.clearAllFilters()
+      await flushRAF()
+      expect(stats?.dataset.value).not.toContain('of')
+      expect(stats?.dataset.value).toContain('50')
+    })
+  })
 })
