@@ -775,7 +775,9 @@ export function renderColumnSummary(
 export function unmountColumnSummary(container: HTMLElement) {
   const root = roots.get(container)
   if (root) {
-    root.unmount()
     roots.delete(container)
+    // Defer unmount to avoid "synchronously unmount a root while React was
+    // already rendering" when destroy() is called from a React effect cleanup
+    queueMicrotask(() => root.unmount())
   }
 }

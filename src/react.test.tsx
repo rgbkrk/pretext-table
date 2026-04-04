@@ -97,15 +97,15 @@ describe('SiftTable', () => {
     expect(container.innerHTML).toBe('')
   })
 
-  it('shows loading state for url prop', async () => {
+  it('renders container for url prop without loading flash', async () => {
     // Mock fetch to never resolve (simulating slow load)
     vi.stubGlobal('fetch', () => new Promise(() => {}))
 
     const { container } = render(<SiftTable url="/data.arrow" />)
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(container.querySelector('.pt-loading')).not.toBeNull()
-    expect(container.querySelector('.pt-loading')?.textContent).toContain('Loading')
+    // No loading indicator — engine handles its own skeleton
+    expect(container.querySelector('.pt-loading')).toBeNull()
 
     vi.unstubAllGlobals()
   })

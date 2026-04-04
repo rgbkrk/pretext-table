@@ -28,4 +28,12 @@ function copyWasmPlugin() {
 export default defineConfig({
   base: process.env.GITHUB_ACTIONS ? '/sift/' : '/',
   plugins: [tailwindcss(), copyWasmPlugin()],
+  build: {
+    rolldownOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        notebook: resolve(__dirname, 'notebook.html'),
+      },
+    },
+  },
 })
