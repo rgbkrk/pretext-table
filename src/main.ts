@@ -18,7 +18,7 @@ import {
 } from './accumulators'
 import { DATASETS, type DatasetEntry } from './datasets'
 import { resolveHuggingFaceParquetUrl } from './parquet-loader'
-import { getModuleSync } from './predicate'
+import { getModuleSync, isAvailable, loadIpc } from './predicate'
 import { createWasmTableData } from './wasm-table-data'
 import { autoWidth } from './auto-width'
 import './style.css'
@@ -181,7 +181,6 @@ function loadLocalArrow$(dataset: DatasetEntry, tableRoot: HTMLElement): Observa
       renderLoadingSkeleton(tableRoot, 'Loading data…')
 
       // Start WASM init in parallel with Arrow download
-      const { isAvailable, loadIpc } = await import('./predicate')
       const [arrowBytes, wasmOk] = await Promise.all([
         response.arrayBuffer().then(b => new Uint8Array(b)),
         isAvailable(),
@@ -292,7 +291,6 @@ function loadHuggingFaceWasm$(dataset: DatasetEntry, tableRoot: HTMLElement): Ob
       renderLoadingSkeleton(tableRoot, 'Resolving dataset…')
 
       // Start WASM init in parallel with URL resolution + Parquet download
-      const { isAvailable } = await import('./predicate')
       const wasmInitPromise = isAvailable()
 
       if (cancelled) return
