@@ -315,6 +315,15 @@ h1 {
   letter-spacing: normal;
 }
 
+.pt-th-profile {
+  display: block;
+  margin-top: 1px;
+  font: 400 9px/1.2 var(--font);
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .pt-cat-summary {
   display: flex;
   flex-direction: column;

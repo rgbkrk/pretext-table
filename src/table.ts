@@ -25,6 +25,8 @@ export type NumericColumnSummary = {
   uniqueCount?: number
   /** True if this column looks like an index/ID (suppress histogram). */
   isIndex?: boolean
+  /** Number of null/undefined/NaN values. */
+  nullCount?: number
 }
 
 export type CategoryEntry = { label: string; count: number; pct: number }
@@ -54,6 +56,8 @@ export type TimestampColumnSummary = {
   min: number
   max: number
   bins: { x0: number; x1: number; count: number }[]
+  /** Number of null/undefined values. */
+  nullCount?: number
 }
 
 export type ColumnSummary =
