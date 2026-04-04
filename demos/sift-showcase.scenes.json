@@ -2,7 +2,6 @@
   {
     "scene": "intro",
     "text": "This is Sift — a crossfilter data explorer that handles massive datasets directly in the browser. Apache Arrow for data, WebAssembly for compute, and zero jank.",
-    "voice": "af_heart",
     "speed": 0.95,
     "overlay": {
       "type": "headline-card",
@@ -16,7 +15,6 @@
   {
     "scene": "summaries",
     "text": "Every column gets a live summary automatically. Histograms for numbers, frequency bars for categories, and ratio indicators for booleans. All computed in Rust, running as WASM.",
-    "voice": "af_heart",
     "speed": 0.95,
     "overlay": {
       "type": "callout",
@@ -28,7 +26,6 @@
   {
     "scene": "scroll-fast",
     "text": "One hundred thousand rows. Zero jank. Watch the stats bar — the dom only holds visible rows at any time. Everything else renders on demand.",
-    "voice": "af_heart",
     "speed": 0.95,
     "overlay": {
       "type": "lower-third",
@@ -54,7 +51,6 @@
   {
     "scene": "sort",
     "text": "Click any column header to sort the entire dataset. Nulls are always sorted last, exactly where you'd expect them.",
-    "voice": "af_heart",
     "speed": 0.95,
     "overlay": {
       "type": "callout",
@@ -66,7 +62,6 @@
   {
     "scene": "brush-filter",
     "text": "Drag across any histogram to create a range filter. Watch every other column's summary update in real time — that's crossfiltering.",
-    "voice": "af_heart",
     "speed": 0.95,
     "overlay": {
       "type": "callout",
@@ -78,7 +73,6 @@
   {
     "scene": "boolean-filter",
     "text": "Click the Yes bar on the Verified column and the entire table filters instantly. Row count drops, every summary updates.",
-    "voice": "af_heart",
     "speed": 0.95,
     "overlay": {
       "type": "callout",
@@ -90,7 +84,6 @@
   {
     "scene": "clear",
     "text": "Clear all filters and the full dataset snaps back instantly. One hundred thousand rows, ready to explore again.",
-    "voice": "af_heart",
     "speed": 0.95,
     "overlay": {
       "type": "lower-third",
@@ -102,7 +95,6 @@
   {
     "scene": "darkmode",
     "text": "Light and dark themes, built in.",
-    "voice": "af_heart",
     "speed": 0.95,
     "overlay": {
       "type": "callout",
@@ -114,7 +106,6 @@
   {
     "scene": "closing",
     "text": "Sift. Open source and ready for your data.",
-    "voice": "af_heart",
     "speed": 0.9,
     "overlay": {
       "type": "headline-card",
