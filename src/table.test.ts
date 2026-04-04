@@ -199,6 +199,39 @@ describe('createTable', () => {
     })
   })
 
+  describe('sort + filter combined', () => {
+    it('sort persists through filter application', async () => {
+      await flushRAF()
+      engine.setSort('score', 'desc')
+      await flushRAF()
+      engine.setFilter(3, { kind: 'boolean', value: true })
+      await flushRAF()
+      expect(engine.getSort()).toEqual({ column: 'score', direction: 'desc' })
+      expect(engine.getFilters()).toHaveLength(1)
+    })
+
+    it('filter persists through sort change', async () => {
+      await flushRAF()
+      engine.setFilter(2, { kind: 'range', min: 0, max: 50 })
+      await flushRAF()
+      engine.setSort('name', 'asc')
+      await flushRAF()
+      expect(engine.getFilters()).toHaveLength(1)
+      expect(engine.getSort()).toEqual({ column: 'name', direction: 'asc' })
+    })
+
+    it('clearAllFilters preserves sort', async () => {
+      await flushRAF()
+      engine.setSort('id', 'asc')
+      engine.setFilter(2, { kind: 'range', min: 10, max: 50 })
+      await flushRAF()
+      engine.clearAllFilters()
+      await flushRAF()
+      expect(engine.getSort()).toEqual({ column: 'id', direction: 'asc' })
+      expect(engine.getFilters()).toEqual([])
+    })
+  })
+
   describe('accessibility', () => {
     it('container has role="grid" and is focusable', async () => {
       await flushRAF()
