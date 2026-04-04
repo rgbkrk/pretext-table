@@ -1,20 +1,23 @@
 # Sift
 
-Crossfilter data explorer. [Pretext](https://github.com/chenglou/pretext) × [Arrow](https://arrow.apache.org/) × [Semiotic](https://semiotic.nteract.io/).
+Crossfilter data explorer. [Pretext](https://github.com/chenglou/pretext) × [Arrow](https://arrow.apache.org/).
 
 ![Sift — crossfilter in action](https://img.runt.run/sift/crossfilter-demo.gif)
 
-Becoming [`@nteract/sift`](https://github.com/nteract). Try it at [rgbkrk.github.io/sift](https://rgbkrk.github.io/sift/).
+[`@nteract/sift`](https://github.com/nteract) on npm. Try it at [rgbkrk.github.io/sift](https://rgbkrk.github.io/sift/).
 
 ## Features
 
 - **Stream Arrow IPC or load Parquet directly** — WASM-native, no server needed
 - **Crossfilter** — brush histograms to filter, all other summaries update instantly
+- **Column profiling** — null%, distinct count shown inline in headers
 - **Smart summaries** — histograms, category bars, boolean ratios, binary value bars, searchable popovers. Adapts visualization to column type × cardinality.
 - **Column type casting** — right-click to treat text as numbers, dates, booleans — with full undo
 - **Smart column detection** — pandas index columns, HuggingFace ClassLabel features
 - **Virtual scroll** — 100k+ rows at 120fps. Pretext layout at 0.0002ms/cell.
-- **RxJS streaming** — cancellable dataset loading via `switchMap`, rolling FPS counter
+- **Odometer status bar** — rolling digit animation for row count, visible range, FPS
+- **Multi-instance** — embed multiple tables on one page (notebook demo included)
+- **RxJS streaming** — cancellable dataset loading via `switchMap`
 - **Mobile** — tap any row for a detail sheet with all column values
 - **Dark mode**, keyboard nav, pinned columns, ARIA grid
 - **8 HuggingFace datasets** built into the demo
@@ -70,7 +73,7 @@ wasm-pack build --target web --release
 | Layout | [@chenglou/pretext](https://github.com/chenglou/pretext) — DOM-free text measurement |
 | Data | [Apache Arrow](https://arrow.apache.org/) — columnar, streamed via RecordBatchReader |
 | Compute | [nteract-predicate](crates/nteract-predicate/) — arrow-rs WASM kernels |
-| Reactivity | [RxJS](https://rxjs.dev/) — streaming pipeline, FPS monitoring |
+| Reactivity | [RxJS](https://rxjs.dev/) — streaming pipeline |
 | Charts | SVG histograms + HTML bars |
 
 ## Development
@@ -83,3 +86,8 @@ npm run test:e2e         # playwright E2E
 npm run build            # production build (demo)
 npm run build:lib        # library build → lib/index.js
 ```
+
+## Demo pages
+
+- `/` — main demo with dataset picker
+- `/notebook.html` — multi-table notebook simulation
