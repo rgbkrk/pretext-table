@@ -1,11 +1,11 @@
-# Embedding the Sift Table Engine
+# Embedding Sift
 
-Use `@nteract/data-explorer` to explore columnar data in your app. WASM-powered, Arrow-native.
+Use `@nteract/sift` to explore columnar data in your app. WASM-powered, Arrow-native, sub-millisecond layout via [pretext](https://github.com/chenglou/pretext).
 
 ## Install
 
 ```sh
-npm install @nteract/data-explorer apache-arrow
+npm install @nteract/sift apache-arrow
 ```
 
 ---
@@ -13,7 +13,7 @@ npm install @nteract/data-explorer apache-arrow
 ## React
 
 ```tsx
-import { SiftTable } from '@nteract/data-explorer'
+import { SiftTable } from '@nteract/sift'
 
 function App() {
   return (
@@ -54,7 +54,7 @@ Parquet files are loaded and decoded entirely in WASM — no server-side convers
 ## Vanilla JS
 
 ```ts
-import { createTable, type TableData } from '@nteract/data-explorer'
+import { createTable, type TableData } from '@nteract/sift'
 
 const container = document.getElementById('table')!
 const engine = createTable(container, tableData)
@@ -80,7 +80,7 @@ engine.clearAllFilters()
 
 // State → SQL/pandas
 const state = engine.getState()
-import { engineStateToExplorerState, predicateToSQL, predicateToPandas } from '@nteract/data-explorer'
+import { engineStateToExplorerState, predicateToSQL, predicateToPandas } from '@nteract/sift'
 const explorer = engineStateToExplorerState(state)
 explorer.filters.map(predicateToSQL)    // ["age BETWEEN 18 AND 65"]
 explorer.filters.map(predicateToPandas) // ["df[(df['age'] >= 18) & (df['age'] <= 65)]"]

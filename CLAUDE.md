@@ -1,6 +1,6 @@
 # Sift
 
-Crossfilter data explorer. Demo: [rgbkrk.github.io/sift](https://rgbkrk.github.io/sift/). Becoming `@nteract/data-explorer`.
+Crossfilter data explorer. Demo: [rgbkrk.github.io/sift](https://rgbkrk.github.io/sift/). Published as `@nteract/sift`.
 
 ## Stack
 
@@ -9,7 +9,7 @@ Crossfilter data explorer. Demo: [rgbkrk.github.io/sift](https://rgbkrk.github.i
 - **@chenglou/pretext** — DOM-free text measurement & layout
 - **apache-arrow** — columnar data, streamed via `RecordBatchReader`
 - **parquet-wasm** — loads HuggingFace Parquet files in the browser
-- **React** + **Semiotic** — header summary charts
+- **React** — header summary charts + category popovers
 - **Rust/WASM** (`nteract-predicate`) — arrow-rs compute kernels
 
 ## Commands
@@ -42,9 +42,10 @@ wasm-pack build --target web --release
 
 - `src/main.ts` — Entry point, dataset picker, data loading, type refinement
 - `src/table.ts` — The table engine (`createTable` → `TableEngine`). Virtual scroll, sort, filter, crossfilter summaries, keyboard nav, ARIA
-- `src/sparkline.tsx` — Header summary charts: histograms (Semiotic), category bars, boolean ratio bars, searchable category popover (portal)
+- `src/sparkline.tsx` — Header summary charts: histograms, category bars, boolean ratio bars, column profiling (null%/distinct), searchable category popover
 - `src/accumulators.ts` — Summary accumulators (numeric, timestamp, categorical, boolean) + type detection/refinement
-- `src/react.tsx` — `<PretextTable>` React wrapper for nteract embedding
+- `src/react.tsx` — `<SiftTable>` React wrapper for embedding (supports multi-instance)
+- `src/notebook.tsx` — Multi-table notebook demo page
 - `src/filter-schema.ts` — Predicate types, ExplorerState, compilers to SQL/pandas/English
 - `src/predicate.ts` — Lazy-loading TS wrapper for nteract-predicate WASM
 - `src/datasets.ts` — HuggingFace dataset catalog
@@ -102,5 +103,5 @@ engine.clearAllFilters()
 ### Naming
 
 - **Sift** — this demo/site
-- **`@nteract/data-explorer`** — the library (future npm package)
+- **`@nteract/sift`** — the npm package
 - **`nteract-predicate`** — the WASM compute crate

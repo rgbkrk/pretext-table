@@ -150,6 +150,17 @@ h1 {
   border-color: var(--muted);
 }
 
+.pt-github-link {
+  color: var(--muted);
+  transition: color 150ms ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pt-github-link:hover {
+  color: var(--ink);
+}
+
 .pt-loading {
   padding: 80px 20px;
   text-align: center;
