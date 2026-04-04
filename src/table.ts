@@ -1193,11 +1193,14 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     lastScrollTop = scrollTop
     lastViewportHeight = viewportH
 
-    const rangeStr = `showing ${first}–${Math.min(last, filteredCount - 1)}`
-    const domStr = `${pool.filter(p => p.assignedRow !== -1).length} DOM rows`
-
+    // User-facing: true visible row range (no overscan)
+    const rangeStr = `showing ${visFirst}–${visLast}`
     range$.next(rangeStr)
-    prevDom = updateStat(statDom, domStr, prevDom)
+
+    // Debug: DOM pool stats (loaded range including overscan)
+    const loadedStr = `loaded ${first}–${Math.min(last, filteredCount - 1)}`
+    const domStr = `${pool.filter(p => p.assignedRow !== -1).length} DOM rows`
+    prevDom = updateStat(statDom, `${loadedStr} · ${domStr}`, prevDom)
   }
 
   // --- Scroll handler ---
