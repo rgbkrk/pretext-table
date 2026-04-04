@@ -20,8 +20,14 @@ import { DATASETS, type DatasetEntry } from './datasets'
 import { resolveHuggingFaceParquetUrl } from './parquet-loader'
 import { getModuleSync, isAvailable, loadIpc } from './predicate'
 import { createWasmTableData } from './wasm-table-data'
+import { initWorker } from './wasm-worker-proxy'
+import { createWorkerTableData, updateWorkerSummaries } from './wasm-worker-table-data'
 import { autoWidth } from './auto-width'
 import './style.css'
+
+// Feature flag: enable web worker for WASM compute
+// Toggle via ?worker=1 URL param or set to true to enable by default
+const USE_WORKER = new URLSearchParams(window.location.search).has('worker')
 
 // --- Column definitions for the generated dataset ---
 
@@ -79,7 +85,9 @@ function boot() {
 
       const load$ = dataset.source === 'local'
         ? loadLocalArrow$(dataset, tableRoot)
-        : loadHuggingFaceWasm$(dataset, tableRoot)
+        : USE_WORKER
+          ? loadHuggingFaceWorker$(dataset, tableRoot)
+          : loadHuggingFaceWasm$(dataset, tableRoot)
 
       return load$.pipe(
         catchError(err => {
@@ -389,6 +397,139 @@ function loadHuggingFaceWasm$(dataset: DatasetEntry, tableRoot: HTMLElement): Ob
         mod.load_parquet_row_group(parquetBytes, g, handle)
         tableData.rowCount = mod.num_rows(handle)
         updateWasmSummaries(mod, handle, tableData, columns, pandasIndexCols)
+        currentEngine!.onBatchAppended()
+        subscriber.next()
+      }
+
+      currentEngine!.setStreamingDone()
+      subscriber.complete()
+    })().catch(err => {
+      if (!cancelled) subscriber.error(err)
+    })
+
+    return () => { cancelled = true }
+  }))
+}
+
+/**
+ * EXPERIMENT: Load a HuggingFace Parquet dataset using a web worker.
+ *
+ * The worker owns all WASM memory. The main thread only does DOM rendering.
+ * Parquet download still happens on main thread (fetch is fast, it's the
+ * decode that's expensive), then bytes are transferred to the worker.
+ */
+function loadHuggingFaceWorker$(dataset: DatasetEntry, tableRoot: HTMLElement): Observable<void> {
+  return defer(() => new Observable<void>(subscriber => {
+    let cancelled = false
+
+    ;(async () => {
+      renderLoadingSkeleton(tableRoot, 'Resolving dataset…')
+
+      // Start worker init in parallel with URL resolution
+      const workerInitPromise = initWorker()
+
+      if (cancelled) return
+      const url = await resolveHuggingFaceParquetUrl(dataset.path, dataset.config)
+
+      if (cancelled) return
+      renderLoadingSkeleton(tableRoot, 'Downloading Parquet…')
+      const [resp, proxy] = await Promise.all([fetch(url), workerInitPromise])
+      if (!resp.ok) {
+        throw new Error(`Failed to fetch Parquet: ${resp.status} ${resp.statusText}`)
+      }
+      const parquetBytes = new Uint8Array(await resp.arrayBuffer())
+
+      if (cancelled) return
+      renderLoadingSkeleton(tableRoot, 'Loading into WASM (worker)…')
+
+      // Get metadata (in worker)
+      const [meta, schemaMetadata] = await Promise.all([
+        proxy.parquetMetadata(parquetBytes),
+        proxy.parquetSchemaMetadata(parquetBytes).catch(() => ({} as Record<string, string>)),
+      ])
+      const numRowGroups = meta[0]
+      const totalRows = meta[1]
+
+      // Parse pandas index columns
+      const pandasIndexCols = new Set<string>()
+      if (schemaMetadata.pandas) {
+        try {
+          const pandas = JSON.parse(schemaMetadata.pandas)
+          for (const ic of pandas.index_columns ?? []) {
+            if (typeof ic === 'string') pandasIndexCols.add(ic)
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
+      // Parse HuggingFace feature metadata
+      const hfFeatures: Record<string, { _type: string; names?: string[] }> = {}
+      if (schemaMetadata.huggingface) {
+        try {
+          const hf = JSON.parse(schemaMetadata.huggingface)
+          Object.assign(hfFeatures, hf?.info?.features ?? {})
+        } catch { /* ignore parse errors */ }
+      }
+
+      // Load first row group in worker
+      const handle = await proxy.loadParquetRowGroup(parquetBytes, 0, 0)
+
+      // Create table data from worker (async — queries worker for metadata)
+      const { tableData, columns, prefetchViewportAsync } = await createWorkerTableData(proxy, handle)
+
+      // The table engine expects synchronous prefetchViewport, but ours is async.
+      // We bridge this by pre-fetching before each render frame.
+      // For the initial mount, we prefetch the first viewport.
+      const INITIAL_VIEWPORT_SIZE = 50
+      const initialIndices = Array.from({ length: Math.min(INITIAL_VIEWPORT_SIZE, tableData.rowCount) }, (_, i) => i)
+      await prefetchViewportAsync(initialIndices)
+
+      // Wrap the async prefetch as the synchronous interface the table expects.
+      // This is a best-effort bridge: it starts the async fetch and returns.
+      // The next animation frame will have the data if the fetch completes in time.
+      tableData.prefetchViewport = (dataRowIndices: number[]) => {
+        prefetchViewportAsync(dataRowIndices).catch(console.error)
+      }
+
+      tableData.recomputeSummaries = () => {
+        updateWorkerSummaries(proxy, handle, tableData, columns, pandasIndexCols)
+          .then(() => {
+            if (currentEngine) currentEngine.onBatchAppended()
+          })
+          .catch(console.error)
+      }
+
+      // Apply metadata: mark pandas index columns
+      const isIndexName = (name: string) => /^(unnamed[: _]*\d*|index|_?id|rowid|row_?id|row_?num)$/i.test(name)
+      for (const col of columns) {
+        if (pandasIndexCols.has(col.key) || isIndexName(col.key)) {
+          const digits = totalRows.toLocaleString().length
+          col.width = Math.max(60, digits * 9 + 24)
+          col.sortable = false
+          if (/^(unnamed[: _]*\d*|__index_level_\d+__)$/i.test(col.key)) col.label = ''
+        }
+        const hfFeature = hfFeatures[col.key]
+        if (hfFeature?._type === 'ClassLabel' && col.columnType !== 'categorical') {
+          col.columnType = 'categorical'
+          col.numeric = false
+        }
+      }
+
+      // Compute initial summaries
+      await updateWorkerSummaries(proxy, handle, tableData, columns, pandasIndexCols)
+
+      if (cancelled) return
+      tableRoot.innerHTML = ''
+      currentEngine = createTable(tableRoot, tableData)
+      subscriber.next()
+
+      // Stream remaining row groups
+      for (let g = 1; g < numRowGroups; g++) {
+        if (cancelled) return
+        await new Promise(r => setTimeout(r, 0))
+        if (cancelled) return
+        await proxy.loadParquetRowGroup(parquetBytes, g, handle)
+        tableData.rowCount = await proxy.numRows(handle)
+        await updateWorkerSummaries(proxy, handle, tableData, columns, pandasIndexCols)
         currentEngine!.onBatchAppended()
         subscriber.next()
       }
