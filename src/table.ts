@@ -1078,10 +1078,17 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     const viewportH = viewport.clientHeight
 
     // True visible range (no overscan) — used for header overlays and "showing X–Y"
-    // Exclude rows hidden behind sticky header or below viewport bottom
+    // Exclude partially-clipped rows: a row is "visible" if at least half its height is on screen
     const visibleDataHeight = viewportH - headerH
-    const visFirst = rowAtOffset(scrollTop)
-    const visLast = Math.min(rowAtOffset(scrollTop + visibleDataHeight), filteredCount - 1)
+    const rawFirst = rowAtOffset(scrollTop)
+    const firstRowVisible = rowPositions[rawFirst + 1] - scrollTop  // how much of first row is showing
+    const visFirst = (firstRowVisible < rowHeights[rawFirst] * 0.5) ? rawFirst + 1 : rawFirst
+    const rawLast = rowAtOffset(scrollTop + visibleDataHeight)
+    const lastRowVisible = (scrollTop + visibleDataHeight) - rowPositions[rawLast]
+    const visLast = Math.min(
+      (rawLast < filteredCount && lastRowVisible < rowHeights[rawLast] * 0.5) ? rawLast - 1 : rawLast,
+      filteredCount - 1,
+    )
 
     // Scroll velocity: extra overscan in the direction of travel
     const scrollDelta = scrollTop - lastScrollTop
