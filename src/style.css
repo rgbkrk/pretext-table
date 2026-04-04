@@ -165,6 +165,10 @@ h1 {
   transition: color 150ms ease, border-color 150ms ease;
 }
 
+.pt-github-btn svg {
+  transform: translateY(1px);
+}
+
 .pt-github-btn:hover {
   color: var(--ink);
   border-color: var(--muted);
