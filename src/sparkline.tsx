@@ -261,12 +261,18 @@ function NumericHistogram({ summary, unfilteredSummary, width, visibleBins, acti
   // Use unfiltered summary so the bar always shows both values, even when one is filtered out
   const sourceSummary = unfilteredSummary ?? summary
   if (sourceSummary.uniqueCount !== undefined && sourceSummary.uniqueCount === 2) {
-    return <BinaryNumericRatioBar summary={sourceSummary} activeFilter={activeFilter} onFilter={onFilter} />
+    return <>
+      <BinaryNumericRatioBar summary={sourceSummary} activeFilter={activeFilter} onFilter={onFilter} />
+      <NumericProfile summary={summary} />
+    </>
   }
 
   // Low-cardinality: show as categorical bars instead of histogram
   if (summary.uniqueCount !== undefined && summary.uniqueCount < 10) {
-    return <LowCardinalityNumericBars summary={summary} activeFilter={activeFilter} onFilter={onFilter} />
+    return <>
+      <LowCardinalityNumericBars summary={summary} activeFilter={activeFilter} onFilter={onFilter} />
+      <NumericProfile summary={summary} />
+    </>
   }
 
   const hasOverlay = visibleBins && Math.max(...visibleBins) > 0
@@ -320,8 +326,29 @@ function NumericHistogram({ summary, unfilteredSummary, width, visibleBins, acti
           {formatNum(summary.min)} – {formatNum(summary.max)}
         </span>
       )}
+      <NumericProfile summary={summary} />
     </div>
   )
+}
+
+function NumericProfile({ summary }: { summary: NumericColumnSummary }) {
+  const totalInBins = summary.bins.reduce((s, b) => s + b.count, 0)
+  // Infer null count: total rows in bins is the non-null count,
+  // so nulls = explicit nullCount OR can't be computed without total rows
+  const nulls = summary.nullCount ?? 0
+  const total = totalInBins + nulls
+
+  const parts: string[] = []
+  if (nulls > 0 && total > 0) {
+    const pct = Math.round((nulls / total) * 100)
+    parts.push(`${pct}% null`)
+  }
+  if (summary.uniqueCount !== undefined) {
+    parts.push(`${summary.uniqueCount.toLocaleString()} distinct`)
+  }
+  if (parts.length === 0) return null
+
+  return <span className="pt-th-profile">{parts.join(' · ')}</span>
 }
 
 function VisibleOverlay({ bins, visibleBins, width }: {

@@ -168,6 +168,7 @@ export class NumericAccumulator implements SummaryAccumulator {
       bins,
       uniqueCount,
       isIndex,
+      nullCount: this.nullCount + this.nanCount,
     }
   }
 }
@@ -175,13 +176,14 @@ export class NumericAccumulator implements SummaryAccumulator {
 export class TimestampAccumulator implements SummaryAccumulator {
   min = Infinity; max = -Infinity
   private allValues: number[] = []
+  private nullCount = 0
 
   add(rawCol: unknown[], startRow: number, count: number) {
     for (let r = startRow; r < startRow + count; r++) {
       const raw = rawCol[r]
-      if (raw == null) continue
+      if (raw == null) { this.nullCount++; continue }
       const v = typeof raw === 'bigint' ? Number(raw) : Number(raw)
-      if (!Number.isFinite(v)) continue
+      if (!Number.isFinite(v)) { this.nullCount++; continue }
       this.allValues.push(v)
       if (v < this.min) this.min = v
       if (v > this.max) this.max = v
@@ -201,7 +203,7 @@ export class TimestampAccumulator implements SummaryAccumulator {
       if (idx < 0) idx = 0
       bins[idx].count++
     }
-    return { kind: 'timestamp', min: this.min, max: this.max, bins }
+    return { kind: 'timestamp', min: this.min, max: this.max, bins, nullCount: this.nullCount }
   }
 }
 
