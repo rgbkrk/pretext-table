@@ -1,5 +1,5 @@
 import { prepare, layout, type PreparedText } from '@chenglou/pretext'
-import { animationFrameScheduler, interval, map, scan, throttleTime, distinctUntilChanged } from 'rxjs'
+import { Subject, animationFrameScheduler, interval, map, scan, throttleTime, distinctUntilChanged } from 'rxjs'
 import { renderColumnSummary, unmountColumnSummary } from './sparkline'
 import { mountColumnMenu, unmountColumnMenu, type ColumnAction } from './column-menu'
 import { fitColumnWidths } from './auto-width'
@@ -750,6 +750,16 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
   const rowsOdometer = createOdometer(statRows)
   const rangeOdometer = createOdometer(statRange)
 
+  // Throttled range display — scroll fires 60fps but the odometer only needs
+  // stable values after scroll settles. Prevents twitchy digit-roll jitter.
+  const range$ = new Subject<string>()
+  const rangeSub = range$.pipe(
+    throttleTime(300, animationFrameScheduler, { trailing: true }),
+    distinctUntilChanged(),
+  ).subscribe(text => {
+    rangeOdometer.update(text)
+  })
+
   function updateRowCountDisplay() {
     if (hasActiveFilters()) {
       rowsOdometer.update(`${filteredCount.toLocaleString()} of ${rowCount.toLocaleString()} rows`)
@@ -1186,7 +1196,7 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
     const rangeStr = `showing ${first}–${Math.min(last, filteredCount - 1)}`
     const domStr = `${pool.filter(p => p.assignedRow !== -1).length} DOM rows`
 
-    rangeOdometer.update(rangeStr)
+    range$.next(rangeStr)
     prevDom = updateStat(statDom, domStr, prevDom)
   }
 
@@ -1559,6 +1569,7 @@ export function createTable(container: HTMLElement, data: TableData, options?: T
       scheduledRaf = null
     }
     fpsSub.unsubscribe()
+    rangeSub.unsubscribe()
     if (summaryDebounceTimer !== null) clearTimeout(summaryDebounceTimer)
 
     // Remove event listeners and observers
