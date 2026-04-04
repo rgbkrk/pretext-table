@@ -95,6 +95,33 @@ describe('NumericAccumulator', () => {
     expect(result.max).toBe(30)
     expect(result.bins.reduce((s, b) => s + b.count, 0)).toBe(4)
   })
+  it('handles single-value column (min === max)', () => {
+    const acc = new NumericAccumulator()
+    const data = [7]
+    acc.add(data, 0, data.length)
+    const result = acc.snapshot(1) as NumericColumnSummary
+    expect(result).not.toBeNull()
+    expect(result.min).toBe(7)
+    expect(result.max).toBe(7)
+    // Bins should not crash with zero-width range
+    expect(result.bins).toHaveLength(BIN_COUNT)
+  })
+
+  it('handles empty data (0 rows)', () => {
+    const acc = new NumericAccumulator()
+    acc.add([], 0, 0)
+    expect(acc.snapshot()).toBeNull()
+  })
+
+  it('handles very large numbers', () => {
+    const acc = new NumericAccumulator()
+    const data = [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER - 1, 0]
+    acc.add(data, 0, data.length)
+    const result = acc.snapshot() as NumericColumnSummary
+    expect(result).not.toBeNull()
+    expect(result.max).toBe(Number.MAX_SAFE_INTEGER)
+    expect(result.min).toBe(0)
+  })
 })
 
 describe('TimestampAccumulator', () => {
@@ -115,6 +142,27 @@ describe('TimestampAccumulator', () => {
   it('returns null for empty data', () => {
     const acc = new TimestampAccumulator()
     expect(acc.snapshot()).toBeNull()
+  })
+
+  it('handles single timestamp (min === max)', () => {
+    const acc = new TimestampAccumulator()
+    const ts = Date.now()
+    acc.add([ts], 0, 1)
+    const result = acc.snapshot() as TimestampColumnSummary
+    expect(result).not.toBeNull()
+    expect(result.min).toBe(ts)
+    expect(result.max).toBe(ts)
+    expect(result.bins).toHaveLength(BIN_COUNT)
+  })
+
+  it('handles null timestamps', () => {
+    const acc = new TimestampAccumulator()
+    const now = Date.now()
+    const data: (number | null)[] = [now, null, now - 1000, null]
+    acc.add(data, 0, data.length)
+    const result = acc.snapshot() as TimestampColumnSummary
+    expect(result).not.toBeNull()
+    expect(result.bins.reduce((s, b) => s + b.count, 0)).toBe(2)
   })
 })
 
@@ -152,6 +200,34 @@ describe('CategoricalAccumulator', () => {
     expect(result.topCategories[1].pct).toBe(40)
     expect(result.topCategories[2].pct).toBe(20)
   })
+
+  it('handles unicode categories', () => {
+    const strings = ['日本語', '日本語', '中文', 'العربية', '日本語']
+    const acc = new CategoricalAccumulator(strings)
+    acc.add([], 0, strings.length)
+    const result = acc.snapshot(strings.length) as CategoricalColumnSummary
+    expect(result.topCategories[0].label).toBe('日本語')
+    expect(result.topCategories[0].count).toBe(3)
+    expect(result.uniqueCount).toBe(3)
+  })
+
+  it('handles empty string categories', () => {
+    const strings = ['', '', 'a', '', 'b']
+    const acc = new CategoricalAccumulator(strings)
+    acc.add([], 0, strings.length)
+    const result = acc.snapshot(strings.length) as CategoricalColumnSummary
+    expect(result.topCategories[0].label).toBe('')
+    expect(result.topCategories[0].count).toBe(3)
+  })
+
+  it('handles single-value categorical', () => {
+    const strings = ['same', 'same', 'same', 'same']
+    const acc = new CategoricalAccumulator(strings)
+    acc.add([], 0, strings.length)
+    const result = acc.snapshot(strings.length) as CategoricalColumnSummary
+    expect(result.uniqueCount).toBe(1)
+    expect(result.othersCount).toBe(0)
+  })
 })
 
 describe('BooleanAccumulator', () => {
@@ -185,6 +261,16 @@ describe('BooleanAccumulator', () => {
     expect(result.falseCount).toBe(1)
     expect(result.nullCount).toBe(3)
     expect(result.total).toBe(6)
+  })
+
+  it('handles all-null column', () => {
+    const acc = new BooleanAccumulator()
+    const data: unknown[] = [null, null, null, undefined]
+    acc.add(data, 0, data.length)
+    const result = acc.snapshot(data.length) as BooleanColumnSummary
+    expect(result.trueCount).toBe(0)
+    expect(result.falseCount).toBe(0)
+    expect(result.nullCount).toBe(4)
   })
 })
 
